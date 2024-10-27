@@ -1,0 +1,7 @@
+let x0 = λz.z in
+    let x1 = λz.z x0 x0 in
+        let x2 = λz.z x1 x1 in
+            let x3 = λz.z x2 x2 in
+                let x4 = λz. z x3 x3 in
+                    let x5 = λz.z x4 x4 in 
+                        x5
