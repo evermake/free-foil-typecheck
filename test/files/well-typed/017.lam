@@ -1,0 +1,1 @@
+let f = (λx. λy. let g = x y in g) in f (λz. z) 0

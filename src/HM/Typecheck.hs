@@ -1,30 +1,35 @@
-{-# LANGUAGE DataKinds        #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
 module HM.Typecheck where
 
-import qualified Control.Monad.Foil      as Foil
+import qualified Control.Monad.Foil as Foil
+import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
-import           Data.Bifunctor
-import qualified Data.Foldable           as F
-import qualified HM.Parser.Abs           as Raw
-import           HM.Syntax
+import Data.Bifunctor
+import qualified Data.Foldable as F
+import qualified HM.Parser.Abs as Raw
+import HM.Syntax
 
+-- $setup
+-- >>> :set -XOverloadedStrings
+
+-- >>> inferTypeNewClosed "λx. λy. x y"
+-- Right ?u1 -> ?u2 -> ?u1 -> ?u2
 inferTypeNewClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeNewClosed expr = do
-  (typ, _, _) <- inferTypeNew [] 0 Foil.emptyNameMap expr
-  return typ
-
-inferTypeNew :: [Constraint] -> Int -> Foil.NameMap n Type' -> Exp n -> Either String (Type', [Constraint], Int)
-inferTypeNew constrs freshId scope expr = do
-  (typ, constrs2, freshId2) <- reconstructType constrs freshId scope expr
-  substs <- unify constrs2
-  return ((applySubstsToType substs typ), [], freshId2)
+  (type', (constrs, _, _)) <- reconstructType ([], Foil.emptyNameMap, 0) expr
+  substs <- unify constrs
+  return (applySubstsToType substs type')
 
 type Constraint = (Type', Type')
 
 type USubst n = (Raw.UVarIdent, Type n)
+
 type USubst' = USubst Foil.VoidS
 
 unify1 :: Constraint -> Either String [USubst']
@@ -57,7 +62,7 @@ unify (c : cs) = do
 applySubstsToConstraint :: [USubst'] -> Constraint -> Constraint
 applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
 
-applySubstToType :: Foil.Distinct n => USubst n -> Type n -> Type n
+applySubstToType :: (Foil.Distinct n) => USubst n -> Type n -> Type n
 applySubstToType (ident, typ) (TUVar x)
   | ident == x = typ
   | otherwise = TUVar x
@@ -65,7 +70,7 @@ applySubstToType _ (FreeFoil.Var x) = FreeFoil.Var x
 applySubstToType subst (FreeFoil.Node node) =
   FreeFoil.Node (bimap (applySubstToScopedType subst) (applySubstToType subst) node)
   where
-    applySubstToScopedType :: Foil.Distinct n => USubst n -> FreeFoil.ScopedAST TypeSig n -> FreeFoil.ScopedAST TypeSig n
+    applySubstToScopedType :: (Foil.Distinct n) => USubst n -> FreeFoil.ScopedAST TypeSig n -> FreeFoil.ScopedAST TypeSig n
     applySubstToScopedType subst' (FreeFoil.ScopedAST binder body) =
       case (Foil.assertExt binder, Foil.assertDistinct binder) of
         (Foil.Ext, Foil.Distinct) ->
@@ -78,60 +83,79 @@ applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType 
 applySubstsInSubsts :: [USubst'] -> USubst' -> USubst'
 applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
 
+deriving instance Functor (Foil.NameMap n)
+
+deriving instance Foldable (Foil.NameMap n)
+
 -- | Recursively "reconstructs" type of an expression.
 -- On success, returns the "reconstructed" type and collected constraints.
-reconstructType :: [Constraint] -> Int -> Foil.NameMap n Type' -> Exp n -> Either String (Type', [Constraint], Int)
-reconstructType constrs freshId _scope ETrue = Right (TBool, constrs, freshId)
-reconstructType constrs freshId _scope EFalse = Right (TBool, constrs, freshId)
-reconstructType constrs freshId _scope (ENat _) = Right (TNat, constrs, freshId)
-reconstructType constrs freshId scope (FreeFoil.Var x) = do
-  let xTyp = Foil.lookupName x scope
+--
+-- >>> reconstructType [] 1 Foil.emptyNameMap "λx. λy. x y"
+-- Right (?u1 -> ?u2 -> ?u3,[(?u1,?u2 -> ?u3)],4)
+--
+-- >>> reconstructType [] 1 Foil.emptyNameMap "(λx. λy. (let g = (x y) in g))"
+-- Right (?u1 -> ?u2 -> ?u4,[],5)
+reconstructType :: ([Constraint], Foil.NameMap n Type', Int) -> Exp n -> Either String (Type', ([Constraint], Foil.NameMap n Type', Int))
+reconstructType arg ETrue = Right (TBool, arg)
+reconstructType arg EFalse = Right (TBool, arg)
+reconstructType arg (ENat _) = Right (TNat, arg)
+reconstructType (constrs, ctx, freshId) (FreeFoil.Var x) = do
+  let xTyp = Foil.lookupName x ctx
   let (specTyp, freshId2) = specialize xTyp freshId
-  return (specTyp, constrs ++ constrs, freshId2)
-reconstructType constrs freshId scope (ELet eWhat x eExpr) = do
-  (whatTyp, constrs2, freshId2) <- inferTypeNew constrs freshId scope eWhat
-  -- Since fresh IDs are generated incrementally, we can deduce which variables
-  -- have been used in the `eWhat`.
-  let genTyp = generalize (unificationVarIdentsBetween freshId freshId2) whatTyp
-  let newScope = Foil.addNameBinder x genTyp scope
-  (exprTyp, constrs3, freshId3) <- reconstructType constrs2 freshId2 newScope eExpr
-  return (exprTyp, constrs3, freshId3)
-reconstructType constrs freshId scope (EAdd lhs rhs) = do
-  (lhsTyp, constrs2, freshId2) <- reconstructType constrs freshId scope lhs
-  (rhsTyp, constrs3, freshId3) <- reconstructType constrs2 freshId2 scope rhs
-  return (TNat, constrs3 ++ [(lhsTyp, TNat), (rhsTyp, TNat)], freshId3)
-reconstructType constrs freshId scope (ESub lhs rhs) = do
-  (lhsTyp, constrs2, freshId2) <- reconstructType constrs freshId scope lhs
-  (rhsTyp, constrs3, freshId3) <- reconstructType constrs2 freshId2 scope rhs
-  return (TNat, constrs3 ++ [(lhsTyp, TNat), (rhsTyp, TNat)], freshId3)
-reconstructType constrs freshId scope (EIf eCond eThen eElse) = do
-  (condTyp, constrs2, freshId2) <- reconstructType constrs freshId scope eCond
-  (thenTyp, constrs3, freshId3) <- reconstructType constrs2 freshId2 scope eThen
-  (elseTyp, constrs4, freshId4) <- reconstructType constrs3 freshId3 scope eElse
-  return (thenTyp, constrs4 ++ [(condTyp, TBool), (thenTyp, elseTyp)], freshId4)
-reconstructType constrs freshId scope (EIsZero e) = do
-  (eTyp, constrs2, freshId2) <- reconstructType constrs freshId scope e
-  return (TBool, constrs2 ++ [(eTyp, TNat)], freshId2)
-reconstructType constrs freshId scope (EAbs x eBody) = do
+  return (specTyp, (constrs, ctx, freshId2))
+reconstructType (constrs, ctx, freshId) (ELet eWhat x eExpr) = do
+  (whatTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) eWhat
+  substs <- unify constrs2
+  let whatTyp1 = applySubstsToType substs whatTyp
+  let ctx3 = fmap (applySubstsToType substs) ctx2
+  let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx3
+  let whatFreeIdents = filter (\i -> elem i ctxVars) (allUVarsOfType whatTyp1)
+  let whatTyp2 = generalize whatFreeIdents whatTyp1
+  let ctx4 = Foil.addNameBinder x whatTyp2 ctx3
+  -- Since we've unified everything, new constraints are empty.
+  (exprTyp, (constrs3, ctx5, freshId3)) <- reconstructType ([], ctx4, freshId2) eExpr
+  return (exprTyp, (constrs3, ctx5, freshId3))
+reconstructType (constrs, ctx, freshId) (EAdd lhs rhs) = do
+  (lhsTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) lhs
+  (rhsTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) rhs
+  return (TNat, (constrs3 ++ [(lhsTyp, TNat), (rhsTyp, TNat)], ctx3, freshId3))
+reconstructType (constrs, ctx, freshId) (ESub lhs rhs) = do
+  (lhsTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) lhs
+  (rhsTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) rhs
+  return (TNat, (constrs3 ++ [(lhsTyp, TNat), (rhsTyp, TNat)], ctx3, freshId3))
+reconstructType (constrs, ctx, freshId) (EIf eCond eThen eElse) = do
+  (condTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) eCond
+  (thenTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) eThen
+  (elseTyp, (constrs4, ctx4, freshId4)) <- reconstructType (constrs3, ctx3, freshId3) eElse
+  return (thenTyp, (constrs4 ++ [(condTyp, TBool), (thenTyp, elseTyp)], ctx4, freshId4))
+reconstructType (constrs, ctx, freshId) (EIsZero e) = do
+  (eTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) e
+  return (TBool, (constrs2 ++ [(eTyp, TNat)], ctx2, freshId2))
+reconstructType (constrs, ctx, freshId) (EAbs x eBody) = do
   let paramType = TUVar (makeIdent freshId)
-  let newScope = Foil.addNameBinder x paramType scope
-  (bodyTyp, constrs2, freshId2) <- reconstructType constrs (freshId + 1) newScope eBody
-  return (TArrow paramType bodyTyp, constrs2, freshId2)
-reconstructType constrs freshId scope (EApp eAbs eArg) = do
-  (absTyp, constrs2, freshId2) <- reconstructType constrs freshId scope eAbs
-  (argTyp, constrs3, freshId3) <- reconstructType constrs2 freshId2 scope eArg
+  let ctx2 = Foil.addNameBinder x paramType ctx
+  (bodyTyp, (constrs2, ctx3, freshId2)) <- reconstructType (constrs, ctx2, (freshId + 1)) eBody
+  return (TArrow paramType bodyTyp, (constrs2, ctx3, freshId2))
+reconstructType (constrs, ctx, freshId) (EApp eAbs eArg) = do
+  (absTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) eAbs
+  (argTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) eArg
   let resultTyp = TUVar (makeIdent freshId3)
-  return (resultTyp, constrs3 ++ [(absTyp, (TArrow argTyp resultTyp))], freshId3 + 1)
-reconstructType constrs freshId scope (ETyped e typ_) = do
+  return (resultTyp, (constrs3 ++ [(absTyp, (TArrow argTyp resultTyp))], ctx3, freshId3 + 1))
+reconstructType (constrs, ctx, freshId) (ETyped e typ_) = do
   let typ = toTypeClosed typ_
-  (eTyp, constrs2, freshId2) <- reconstructType constrs freshId scope e
-  return (typ, constrs2 ++ [(eTyp, typ)], freshId2)
-reconstructType constrs freshId scope (EFor eFrom eTo x eBody) = do
-  (fromTyp, constrs2, freshId2) <- reconstructType constrs freshId scope eFrom
-  (toTyp, constrs3, freshId3) <- reconstructType constrs2 freshId2 scope eTo
-  let newScope = Foil.addNameBinder x TNat scope
-  (bodyTyp, constrs4, freshId4) <- reconstructType constrs3 freshId3 newScope eBody
-  return (bodyTyp, constrs4 ++ [(fromTyp, TNat), (toTyp, TNat)], freshId4)
+  (eTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) e
+  return (typ, (constrs2 ++ [(eTyp, typ)], ctx2, freshId2))
+reconstructType (constrs, ctx, freshId) (EFor eFrom eTo x eBody) = do
+  (fromTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) eFrom
+  (toTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) eTo
+  let ctx4 = Foil.addNameBinder x TNat ctx3
+  (bodyTyp, (constrs4, ctx5, freshId4)) <- reconstructType (constrs3, ctx4, freshId3) eBody
+  return (bodyTyp, (constrs4 ++ [(fromTyp, TNat), (toTyp, TNat)], ctx5, freshId4))
+
+allUVarsOfType :: Type' -> [Raw.UVarIdent]
+allUVarsOfType (TUVar ident) = [ident]
+allUVarsOfType (FreeFoil.Var _) = []
+allUVarsOfType (FreeFoil.Node node) = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] node
 
 unificationVarIdentsBetween :: Int -> Int -> [Raw.UVarIdent]
 unificationVarIdentsBetween a b = map makeIdent [a .. (b - 1)]
@@ -146,10 +170,10 @@ makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 generalize :: [Raw.UVarIdent] -> Type' -> Type'
 generalize = go Foil.emptyScope
   where
-    go :: Foil.Distinct n => Foil.Scope n -> [Raw.UVarIdent] -> Type n -> Type n
-    go _     []     type_ = type_
-    go scope (x:xs) type_ = Foil.withFresh scope $ \binder ->
-      let newScope = Foil.extendScope binder scope
+    go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> Type n -> Type n
+    go _ [] type_ = type_
+    go ctx (x : xs) type_ = Foil.withFresh ctx $ \binder ->
+      let newScope = Foil.extendScope binder ctx
           x' = FreeFoil.Var (Foil.nameOf binder)
           type' = applySubstToType (x, x') (Foil.sink type_)
        in TForAll binder (go newScope xs type')
