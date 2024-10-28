@@ -12,14 +12,21 @@ import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifunctor
 import qualified Data.Foldable as F
+import qualified Data.IntMap as IntMap
 import qualified HM.Parser.Abs as Raw
 import HM.Syntax
 
 -- $setup
 -- >>> :set -XOverloadedStrings
 
--- >>> inferTypeNewClosed "λx. λy. x y"
--- Right ?u1 -> ?u2 -> ?u1 -> ?u2
+-- >>> inferTypeNewClosed "λx. x"
+-- Right ?u0 -> ?u0
+-- >>> inferTypeNewClosed "λx. x + 1"
+-- Right Nat -> Nat
+-- >>> inferTypeNewClosed "let f = (λx. λy. let g = x y in g) in f (λz. z) 0"
+-- Right Nat
+-- >>> inferTypeNewClosed "let twice = (λt. (λx. (t (t x)))) in let add2 = (λx. x + 2) in let bool2int = (λb. if b then 1 else 0) in let not = (λb. if b then false else true) in (twice add2) (bool2int ((twice not) true))"
+-- Right Nat
 inferTypeNewClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeNewClosed expr = do
   (type', (constrs, _, _)) <- reconstructType ([], Foil.emptyNameMap, 0) expr
@@ -109,12 +116,13 @@ reconstructType (constrs, ctx, freshId) (ELet eWhat x eExpr) = do
   let whatTyp1 = applySubstsToType substs whatTyp
   let ctx3 = fmap (applySubstsToType substs) ctx2
   let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx3
-  let whatFreeIdents = filter (\i -> elem i ctxVars) (allUVarsOfType whatTyp1)
+  let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
   let whatTyp2 = generalize whatFreeIdents whatTyp1
   let ctx4 = Foil.addNameBinder x whatTyp2 ctx3
-  -- Since we've unified everything, new constraints are empty.
-  (exprTyp, (constrs3, ctx5, freshId3)) <- reconstructType ([], ctx4, freshId2) eExpr
-  return (exprTyp, (constrs3, ctx5, freshId3))
+  -- (exprTyp, (constrs3, ctx5, freshId3)) <- reconstructType ([], ctx4, freshId2) eExpr -- DOESN'T work with empty constraints
+  (exprTyp, (constrs3, ctx5, freshId3)) <- reconstructType (constrs2, ctx4, freshId2) eExpr -- DO work with previous constraints
+  let ctx6 = popNameBinder x ctx5
+  return (exprTyp, (constrs3, ctx6, freshId3))
 reconstructType (constrs, ctx, freshId) (EAdd lhs rhs) = do
   (lhsTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) lhs
   (rhsTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) rhs
@@ -135,7 +143,8 @@ reconstructType (constrs, ctx, freshId) (EAbs x eBody) = do
   let paramType = TUVar (makeIdent freshId)
   let ctx2 = Foil.addNameBinder x paramType ctx
   (bodyTyp, (constrs2, ctx3, freshId2)) <- reconstructType (constrs, ctx2, (freshId + 1)) eBody
-  return (TArrow paramType bodyTyp, (constrs2, ctx3, freshId2))
+  let ctx4 = popNameBinder x ctx3
+  return (TArrow paramType bodyTyp, (constrs2, ctx4, freshId2))
 reconstructType (constrs, ctx, freshId) (EApp eAbs eArg) = do
   (absTyp, (constrs2, ctx2, freshId2)) <- reconstructType (constrs, ctx, freshId) eAbs
   (argTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) eArg
@@ -150,12 +159,16 @@ reconstructType (constrs, ctx, freshId) (EFor eFrom eTo x eBody) = do
   (toTyp, (constrs3, ctx3, freshId3)) <- reconstructType (constrs2, ctx2, freshId2) eTo
   let ctx4 = Foil.addNameBinder x TNat ctx3
   (bodyTyp, (constrs4, ctx5, freshId4)) <- reconstructType (constrs3, ctx4, freshId3) eBody
-  return (bodyTyp, (constrs4 ++ [(fromTyp, TNat), (toTyp, TNat)], ctx5, freshId4))
+  let ctx6 = popNameBinder x ctx5
+  return (bodyTyp, (constrs4 ++ [(fromTyp, TNat), (toTyp, TNat)], ctx6, freshId4))
 
 allUVarsOfType :: Type' -> [Raw.UVarIdent]
 allUVarsOfType (TUVar ident) = [ident]
 allUVarsOfType (FreeFoil.Var _) = []
 allUVarsOfType (FreeFoil.Node node) = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] node
+
+popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
+popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
 
 unificationVarIdentsBetween :: Int -> Int -> [Raw.UVarIdent]
 unificationVarIdentsBetween a b = map makeIdent [a .. (b - 1)]
