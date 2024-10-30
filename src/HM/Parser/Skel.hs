@@ -48,7 +48,6 @@ transTerm x = case x of
   HM.Parser.Abs.TNat -> failure x
   HM.Parser.Abs.TBool -> failure x
   HM.Parser.Abs.TArrow term1 term2 -> failure x
-  HM.Parser.Abs.TVar ident -> failure x
   HM.Parser.Abs.TForAll pattern_ scopedterm -> failure x
 
 transScopedTerm :: HM.Parser.Abs.ScopedTerm -> Result

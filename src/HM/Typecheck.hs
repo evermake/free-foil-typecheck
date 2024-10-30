@@ -35,12 +35,20 @@ typecheckClosed
   -> Either String (Term Foil.VoidS) {- type -}
 typecheckClosed = typecheck Foil.emptyNameMap
 
+type Context n = Foil.NameMap n (Maybe (Term n))
+
+extendContext :: Foil.Distinct n => Foil.NameBinder n l -> Maybe (Term n) -> Context n -> Context l
+extendContext binder type_ =
+  case (Foil.assertExt binder, Foil.assertDistinct binder) of
+    (Foil.Ext, Foil.Distinct) ->
+      fmap (fmap Foil.sink) . Foil.addNameBinder binder type_
+
 typecheck
   :: Foil.Distinct n
-  => Foil.NameMap n (Term n)
+  => Context n
   -> Term n {- exp -}
   -> Term n {- type -}
-  -> Either String (Term n) {- type -}
+  -> Either String (Term n) {- type -} -- TODO: convert to (Maybe (Term n))
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
   -- if typeOfE == expectedType
@@ -59,10 +67,13 @@ typecheck scope e expectedType = do
 
 inferType
   :: (Foil.Distinct n)
-  => Foil.NameMap n (Term n)
+  => Context n
   -> Term n
-  -> Either String (Term n)
-inferType scope (FreeFoil.Var n) = Right (Foil.lookupName n scope) -- Γ, x : T ⊢ x : T
+  -> Either String (Term n) -- TODO: convert to (Maybe (Term n))
+inferType scope (FreeFoil.Var n) = -- Γ, x : T ⊢ x : T
+  case (Foil.lookupName n scope) of 
+    Just t -> Right t
+    Nothing -> undefined -- TODO: figure out what to do here
 inferType _scope ETrue = return TBool
 inferType _scope EFalse = return TBool
 inferType _scope (ENat _) = return TNat
@@ -90,14 +101,14 @@ inferType scope (ELet e1 (FoilPatternVar binder) e2) = do
       -- Γ ⊢ let x = e1 in e2 : ?
       type1 <- inferType scope e1 -- Γ ⊢ e1 : type1
 
-      let newScope = extendContext binder type1 scope -- Γ' = Γ, x : type1
+      let newScope = extendContext binder (Just type1) scope -- Γ' = Γ, x : type1
       type' <- inferType newScope e2 -- Γ' ⊢ e2 : ?
       unsinkType scope type'
 inferType scope (EAbs type_ (FoilPatternVar x) e) = do
   case Foil.assertDistinct x of
     Foil.Distinct -> do
       -- Γ ⊢ λx : type_. e : ?
-      let newScope = extendContext x type_ scope -- Γ' = Γ, x : type_
+      let newScope = extendContext x (Just type_) scope -- Γ' = Γ, x : type_
       type' <- inferType newScope e
       TArrow type_ <$> unsinkType scope type'
 inferType scope (EApp e1 e2) = do
@@ -113,26 +124,33 @@ inferType scope (EFor e1 e2 (FoilPatternVar x) expr) = do
     Foil.Distinct -> do
       _ <- typecheck scope e1 TNat
       _ <- typecheck scope e2 TNat
-      let newScope = extendContext x TNat scope
+      let newScope = extendContext x (Just TNat) scope
       type' <- inferType newScope expr
       unsinkType scope type'
-inferType scope (ETAbs t e) = do  -- TODO: figure out why ETAbs has a third parameter?
-  -- let newTypeScope = Foil.extendScopePattern t
-  -- TArrow (Var t) <$> inferType scope newTypeScope e
-  error "FIXME"
-inferType scope (ETApp e t) = do
+inferType scope (ETAbs pat@(FoilPatternVar x) e) = do  
+  case Foil.assertDistinct x of
+    Foil.Distinct -> do
+      let newScope = extendContext x Nothing scope
+      type' <- inferType newScope e
+      TForAll pat <$> unsinkType newScope type'
+inferType _scope (ETApp _e _t) = do -- TODO: figure out what's wrong with the following
   -- type1 <- inferType scope e
   -- case type1 of
-  --   TArrow type_ types -> do
-  --     _ <- typecheck scope type_ TVar
-  --     let subst = Foil.addSubst Foil.identitySubst typeVar t
-  --     inferType scope (substitute subst e)
-  --   _ -> Left ("expected type\n TArrow (TVar t) _\n but got type\n " <> show e)
-  error "FIXME"
-inferType _scope TForAll{} = error "TODO"
+  --   TForAll var@(FoilPatternVar binder) types -> do
+  --     case (Foil.lookupName (Foil.nameOf binder) scope) of 
+  --       Nothing -> do 
+  --         let subst = Foil.addSubst Foil.identitySubst binder t
+  --         inferType scope (FreeFoil.substitute (nameMapToScope scope) subst e)
+  --       Just t -> Left ("expected type variable but got bound variable " <> show var)
+  --   _ -> Left ("expected type\n TForAll _ _ \n but got type\n " <> show type1)
+  error "TODO" 
+inferType scope (TForAll (FoilPatternVar tv) _expr) = do
+  let _newScope = extendContext tv Nothing scope
+  -- type' <- 
+  error "TODO"
 inferType _ _ = error "TODO"
 
-unsinkType :: Foil.Distinct l => Foil.NameMap n (Term n) -> Term l -> Either String (Term n)
+unsinkType :: Foil.Distinct l => Context n -> Term l -> Either String (Term n)
 unsinkType scope type_ = do
   case unsinkAST (nameMapToScope scope) type_ of
     Nothing     -> Left "dependent types!"
@@ -148,13 +166,6 @@ deriving instance Traversable (Foil.NameMap n)
 nameMapToScope :: Foil.NameMap n a -> Foil.Scope n
 nameMapToScope (Foil.NameMap m) = Foil.UnsafeScope (IntMap.keysSet m)
 
-type Context n = Foil.NameMap n (Term n)
-
-extendContext :: Foil.Distinct n => Foil.NameBinder n l -> Term n -> Context n -> Context l
-extendContext binder type_ =
-  case (Foil.assertExt binder, Foil.assertDistinct binder) of
-    (Foil.Ext, Foil.Distinct) ->
-      fmap Foil.sink . Foil.addNameBinder binder type_
 
 -- TForAll :: Pattern n l -> Term l -> Term n
 --

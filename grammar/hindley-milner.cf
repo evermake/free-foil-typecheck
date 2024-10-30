@@ -27,7 +27,6 @@ TUVar.  Term ::= UVarIdent ;
 TNat.   Term ::= "Nat" ;
 TBool.  Term ::= "Bool" ;
 TArrow. Term ::= Term "->" Term ;
-TVar.   Term ::= Ident ;
 TForAll. Term ::= "forall" Pattern "." ScopedTerm ;
 
 -- ScopedTerm. ScopedTerm ::= Term ;

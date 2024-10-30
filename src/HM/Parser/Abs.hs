@@ -38,7 +38,6 @@ data Term
     | TNat
     | TBool
     | TArrow Term Term
-    | TVar Ident
     | TForAll Pattern ScopedTerm
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 

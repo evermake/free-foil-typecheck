@@ -111,7 +111,6 @@ Term
   | 'Nat' { HM.Parser.Abs.TNat }
   | 'Bool' { HM.Parser.Abs.TBool }
   | Term '->' Term { HM.Parser.Abs.TArrow $1 $3 }
-  | Ident { HM.Parser.Abs.TVar $1 }
   | 'forall' Pattern '.' ScopedTerm { HM.Parser.Abs.TForAll $2 $4 }
 
 ScopedTerm :: { HM.Parser.Abs.ScopedTerm }

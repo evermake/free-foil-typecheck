@@ -166,7 +166,6 @@ instance Print HM.Parser.Abs.Term where
     HM.Parser.Abs.TNat -> prPrec i 0 (concatD [doc (showString "Nat")])
     HM.Parser.Abs.TBool -> prPrec i 0 (concatD [doc (showString "Bool")])
     HM.Parser.Abs.TArrow term1 term2 -> prPrec i 0 (concatD [prt 0 term1, doc (showString "->"), prt 0 term2])
-    HM.Parser.Abs.TVar id_ -> prPrec i 0 (concatD [prt 0 id_])
     HM.Parser.Abs.TForAll pattern_ scopedterm -> prPrec i 0 (concatD [doc (showString "forall"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
 
 instance Print HM.Parser.Abs.ScopedTerm where
