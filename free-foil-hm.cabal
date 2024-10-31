@@ -1,6 +1,6 @@
 cabal-version: 1.24
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -36,6 +36,7 @@ library
       HM.Parser.Par
       HM.Parser.Print
       HM.Syntax
+      HM.TestFreeFoil
       HM.Typecheck
   other-modules:
       Paths_free_foil_hm
