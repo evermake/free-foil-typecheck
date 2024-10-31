@@ -26,8 +26,7 @@ TNat.    Type ::= "Nat" ;
 TBool.   Type ::= "Bool" ;
 TArrow.  Type ::= Type "->" Type ;
 TVar.    Type ::= Ident ;
-TFake.   Type ::= "fake" TypePattern "." ScopedType ; -- FIXME: for previous code to work
-TForAll. Type ::= "forall" UVarIdent "." Type ;       -- FIXME: Forall doesn't use free-foil functionality
+TForAll. Type ::= "forall" TypePattern "." ScopedType ;
 
 ScopedType. ScopedType ::= Type ;
 

@@ -1,6 +1,7 @@
 module HM.InterpretSpec where
 
 import Control.Monad (forM_)
+import Data.List (sort)
 import HM.Interpret
 import System.Directory
 import System.FilePath
@@ -10,13 +11,13 @@ spec :: Spec
 spec = parallel $ do
   describe "well-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/files/well-typed")
-    forM_ paths $ \path -> it path $ do
+    forM_ (sort paths) $ \path -> it path $ do
       contents <- readFile path
       interpret contents `shouldSatisfy` isSuccess
 
   describe "ill-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/files/ill-typed")
-    forM_ paths $ \path -> it path $ do
+    forM_ (sort paths) $ \path -> it path $ do
       contents <- readFile path
       interpret contents `shouldSatisfy` isTypeError
 

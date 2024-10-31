@@ -43,8 +43,7 @@ data Type
     | TBool
     | TArrow Type Type
     | TVar Ident
-    | TFake TypePattern ScopedType
-    | TForAll UVarIdent Type
+    | TForAll TypePattern ScopedType
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data ScopedType = ScopedType Type

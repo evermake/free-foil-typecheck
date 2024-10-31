@@ -54,8 +54,7 @@ transType x = case x of
   HM.Parser.Abs.TBool -> failure x
   HM.Parser.Abs.TArrow type_1 type_2 -> failure x
   HM.Parser.Abs.TVar ident -> failure x
-  HM.Parser.Abs.TFake typepattern scopedtype -> failure x
-  HM.Parser.Abs.TForAll uvarident type_ -> failure x
+  HM.Parser.Abs.TForAll typepattern scopedtype -> failure x
 
 transScopedType :: HM.Parser.Abs.ScopedType -> Result
 transScopedType x = case x of

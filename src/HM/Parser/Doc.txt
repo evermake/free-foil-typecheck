@@ -30,9 +30,9 @@ The set of reserved words is the set of terminals appearing in the grammar. Thos
 
 The reserved words used in Parser are the following:
   | ``Bool`` | ``Nat`` | ``do`` | ``else``
-  | ``fake`` | ``false`` | ``for`` | ``forall``
-  | ``if`` | ``in`` | ``iszero`` | ``let``
-  | ``then`` | ``true`` | ``λ`` |
+  | ``false`` | ``for`` | ``forall`` | ``if``
+  | ``in`` | ``iszero`` | ``let`` | ``then``
+  | ``true`` | ``λ`` |  |
 
 The symbols used in Parser are the following:
   | + | - | ( | )
@@ -72,8 +72,7 @@ All other symbols are terminals.
   |  |  **|**  | ``Bool``
   |  |  **|**  | //Type// ``->`` //Type//
   |  |  **|**  | //Ident//
-  |  |  **|**  | ``fake`` //TypePattern// ``.`` //ScopedType//
-  |  |  **|**  | ``forall`` //UVarIdent// ``.`` //Type//
+  |  |  **|**  | ``forall`` //TypePattern// ``.`` //ScopedType//
   | //ScopedType// | -> | //Type//
   | //TypePattern// | -> | //Ident//
 

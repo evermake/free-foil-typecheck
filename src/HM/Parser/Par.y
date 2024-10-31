@@ -54,17 +54,16 @@ import HM.Parser.Lex
   ']'         { PT _ (TS _ 13)        }
   'do'        { PT _ (TS _ 14)        }
   'else'      { PT _ (TS _ 15)        }
-  'fake'      { PT _ (TS _ 16)        }
-  'false'     { PT _ (TS _ 17)        }
-  'for'       { PT _ (TS _ 18)        }
-  'forall'    { PT _ (TS _ 19)        }
-  'if'        { PT _ (TS _ 20)        }
-  'in'        { PT _ (TS _ 21)        }
-  'iszero'    { PT _ (TS _ 22)        }
-  'let'       { PT _ (TS _ 23)        }
-  'then'      { PT _ (TS _ 24)        }
-  'true'      { PT _ (TS _ 25)        }
-  'λ'         { PT _ (TS _ 26)        }
+  'false'     { PT _ (TS _ 16)        }
+  'for'       { PT _ (TS _ 17)        }
+  'forall'    { PT _ (TS _ 18)        }
+  'if'        { PT _ (TS _ 19)        }
+  'in'        { PT _ (TS _ 20)        }
+  'iszero'    { PT _ (TS _ 21)        }
+  'let'       { PT _ (TS _ 22)        }
+  'then'      { PT _ (TS _ 23)        }
+  'true'      { PT _ (TS _ 24)        }
+  'λ'         { PT _ (TS _ 25)        }
   L_Ident     { PT _ (TV $$)          }
   L_integ     { PT _ (TI $$)          }
   L_UVarIdent { PT _ (T_UVarIdent $$) }
@@ -120,8 +119,7 @@ Type
   | 'Bool' { HM.Parser.Abs.TBool }
   | Type '->' Type { HM.Parser.Abs.TArrow $1 $3 }
   | Ident { HM.Parser.Abs.TVar $1 }
-  | 'fake' TypePattern '.' ScopedType { HM.Parser.Abs.TFake $2 $4 }
-  | 'forall' UVarIdent '.' Type { HM.Parser.Abs.TForAll $2 $4 }
+  | 'forall' TypePattern '.' ScopedType { HM.Parser.Abs.TForAll $2 $4 }
 
 ScopedType :: { HM.Parser.Abs.ScopedType }
 ScopedType : Type { HM.Parser.Abs.ScopedType $1 }
