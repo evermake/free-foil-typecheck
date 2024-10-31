@@ -1,0 +1,7 @@
+let pair = λa.λf.λs a f s in
+    let x1 = λy. pair y y in
+        let x2 = λy. x1 (x1 y) in
+            let x3 = λy. x2 (x2 y) in
+                let x4 = λy. x3 (x3 y) in
+                    let x5 = λy. x4 (x4 y) in
+                        x5 λz.z
