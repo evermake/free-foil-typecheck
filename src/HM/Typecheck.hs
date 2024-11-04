@@ -133,17 +133,13 @@ inferType scope (ETAbs pat@(FoilPatternVar x) e) = do
       let newScope = extendContext x Nothing scope
       type' <- inferType newScope e
       TForAll pat <$> unsinkType newScope type'
-inferType _scope (ETApp _e _t) = do -- TODO: figure out what's wrong with the following
-  -- type1 <- inferType scope e
-  -- case type1 of
-  --   TForAll var@(FoilPatternVar binder) types -> do
-  --     case (Foil.lookupName (Foil.nameOf binder) scope) of 
-  --       Nothing -> do 
-  --         let subst = Foil.addSubst Foil.identitySubst binder t
-  --         inferType scope (FreeFoil.substitute (nameMapToScope scope) subst e)
-  --       Just t -> Left ("expected type variable but got bound variable " <> show var)
-  --   _ -> Left ("expected type\n TForAll _ _ \n but got type\n " <> show type1)
-  error "TODO" 
+inferType scope (ETApp e t) = do 
+  eType <- inferType scope e
+  case eType of
+    TForAll (FoilPatternVar binder) tbody -> do
+      let subst = Foil.addSubst Foil.identitySubst binder t
+        in return (FreeFoil.substitute (nameMapToScope scope) subst tbody)
+    _ -> Left ("unexpected type application (not a forall)")
 inferType scope (TForAll (FoilPatternVar tv) _expr) = do
   let _newScope = extendContext tv Nothing scope
   -- type' <- 
