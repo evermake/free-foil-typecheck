@@ -8,6 +8,7 @@
 module HM.Typecheck where
 
 -- import Control.Applicative (Const)
+import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil as FreeFoil
 import qualified Control.Monad.Foil.Internal as Foil
@@ -31,9 +32,9 @@ import HM.Syntax
 -- Right Nat
 inferTypeNewClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeNewClosed expr = do
-  (type', TypingContext constrs _ _ _) <- reconstructType (TypingContext [] [] Foil.emptyNameMap 0) expr
-  substs <- unify constrs
-  return (applySubstsToType substs type')
+  (type', TypingContext constrs substs _ _) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0)
+  substs' <- unify (map (applySubstsToConstraint substs) constrs)
+  return (applySubstsToType substs' type')
 
 type Constraint = (Type', Type')
 
@@ -61,12 +62,50 @@ unify1 c =
         Just lr -> unify (F.toList lr) -- ignores "scopes", only works with "terms"
     (lhs, rhs) -> Left ("cannot unify " ++ show lhs ++ show rhs)
 
+infixr 6 +++
+(+++) :: [USubst'] -> [USubst'] -> [USubst']
+xs +++ ys = map (applySubstsInSubsts ys) xs ++ ys
+
 unify :: [Constraint] -> Either String [USubst']
 unify [] = return []
 unify (c : cs) = do
-  subst <- unify1 c
-  subst' <- unify (map (applySubstsToConstraint subst) cs)
-  return (map (applySubstsInSubsts subst') subst ++ subst')
+  substs <- unify1 c
+  substs' <- unify (map (applySubstsToConstraint substs) cs)
+  return (substs +++ substs')
+
+unifyWith :: [USubst'] -> [Constraint] -> Either String [USubst']
+unifyWith substs constraints = unify (map (applySubstsToConstraint substs) constraints)
+
+newtype TypeCheck n a = TypeCheck { runTypeCheck :: TypingContext n -> Either String (a, TypingContext n) }
+  deriving (Functor)
+
+-- instance Functor (TypeCheck n) where
+--   fmap f (TypeCheck g) = TypeCheck $ \tc ->
+--     case g tc of
+--       Left err -> Left err
+--       Right (x, tc') -> Right (f x, tc')
+
+instance Applicative (TypeCheck n) where
+  pure x = TypeCheck $ \tc -> Right (x, tc)
+  (<*>) = ap
+
+instance Monad (TypeCheck n) where
+  -- return x = TypeCheck $ \tc -> Right (x, tc)
+
+  -- (>>=) :: TypeCheck a -> (a -> TypeCheck b) -> TypeCheck b
+  -- g :: TypingContext n -> Either String (a, TypingContext n)
+  -- TypeCheck g >>= f = TypeCheck $ \tc ->
+  --   case g tc of
+  --     Left err -> Left err
+  --     Right (x, tc') -> runTypeCheck (f x) tc'
+  --
+  -- do
+  --  x <- TypeCheck g
+  --  f x
+  TypeCheck g >>= f = TypeCheck $ \tc -> do
+    (x, tc') <- g tc
+    runTypeCheck (f x) tc'
+
 
 applySubstsToConstraint :: [USubst'] -> Constraint -> Constraint
 applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
@@ -103,6 +142,43 @@ data TypingContext n = TypingContext
     tcFreshId :: Int
   }
 
+get :: TypeCheck n (TypingContext n)
+get = TypeCheck $ \tc -> Right (tc, tc)
+
+put :: TypingContext n -> TypeCheck n ()
+put new = TypeCheck $ \_old -> Right ((), new)
+
+eitherToTypeCheck :: Either String a -> TypeCheck n a
+eitherToTypeCheck (Left err) = TypeCheck $ \_tc -> Left err
+eitherToTypeCheck (Right x)  = TypeCheck $ \tc -> Right (x, tc)
+
+unifyTypeCheck :: TypeCheck n ()
+unifyTypeCheck = do
+  TypingContext constraints substs ctx freshId <- get
+  substs' <- eitherToTypeCheck (unifyWith substs constraints)
+  put (TypingContext [] (substs +++ substs') ctx freshId)
+
+enterScope :: Foil.NameBinder n l -> Type' -> TypeCheck l a -> TypeCheck n a
+enterScope binder type_ code = do
+  TypingContext constraints substs ctx freshId <- get
+  let ctx' = Foil.addNameBinder binder type_ ctx
+  (x, TypingContext constraints'' substs'' ctx'' freshId'') <- eitherToTypeCheck $
+    runTypeCheck code (TypingContext constraints substs ctx' freshId)
+  let ctx''' = popNameBinder binder ctx''
+  put (TypingContext constraints'' substs'' ctx''' freshId'')
+  return x
+
+addConstraints :: [Constraint] -> TypeCheck n ()
+addConstraints constrs = do
+  TypingContext constraints substs ctx freshId <- get
+  put (TypingContext (constrs ++ constraints) substs ctx freshId)
+
+freshTypeVar :: TypeCheck n Type'
+freshTypeVar = do
+  TypingContext constraints substs ctx freshId <- get
+  put (TypingContext constraints substs ctx (freshId + 1))
+  return (TUVar (makeIdent freshId))
+
 -- | Recursively "reconstructs" type of an expression.
 -- On success, returns the "reconstructed" type and collected constraints.
 --
@@ -111,65 +187,65 @@ data TypingContext n = TypingContext
 --
 -- >>> reconstructType [] 1 Foil.emptyNameMap "(λx. λy. (let g = (x y) in g))"
 -- Right (?u1 -> ?u2 -> ?u4,[],5)
-reconstructType :: TypingContext n -> Exp n -> Either String (Type', TypingContext n)
-reconstructType arg ETrue = Right (TBool, arg)
-reconstructType arg EFalse = Right (TBool, arg)
-reconstructType arg (ENat _) = Right (TNat, arg)
-reconstructType (TypingContext constrs subst ctx freshId) (FreeFoil.Var x) = do
+reconstructType :: Exp n -> TypeCheck n Type'
+reconstructType ETrue = return TBool
+reconstructType EFalse = return TBool
+reconstructType (ENat _) = return TNat -- TypeCheck $ \tc -> Right (TNat, tc)
+reconstructType (FreeFoil.Var x) = do
+  TypingContext constrs subst ctx freshId <- get
   let xTyp = Foil.lookupName x ctx
   let (specTyp, freshId2) = specialize xTyp freshId
-  return (specTyp, TypingContext constrs subst ctx freshId2)
-reconstructType tc (ELet eWhat x eExpr) = do
-  (whatTyp, TypingContext constrs2 substs2 ctx2 freshId2) <- reconstructType tc eWhat
-  substs <- unify constrs2
-  let whatTyp1 = applySubstsToType substs whatTyp
-  let ctx3 = fmap (applySubstsToType substs) ctx2
-  let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx3
-  let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
-  let whatTyp2 = generalize whatFreeIdents whatTyp1
-  let ctx4 = Foil.addNameBinder x whatTyp2 ctx3
-  (exprTyp, TypingContext constrs3 substs3 ctx5 freshId3) <- reconstructType (TypingContext [] substs ctx4 freshId2) eExpr -- DOESN'T work with empty constraints
-  -- (exprTyp, TypingContext constrs3 substs3 ctx5 freshId3) <- reconstructType (TypingContext constrs2 substs ctx4 freshId2) eExpr -- DO work with previous constraints
-  let ctx6 = popNameBinder x ctx5
-  return (exprTyp, TypingContext constrs3 (map (applySubstsInSubsts substs2) substs3 ++ substs2) ctx6 freshId3)
-reconstructType tc (EAdd lhs rhs) = do
-  (lhsTyp, tc2) <- reconstructType tc lhs
-  (rhsTyp, TypingContext constrs2 subst2 ctx2 freshId2) <- reconstructType tc2 rhs
-  return (TNat, TypingContext (constrs2 ++ [(applySubstsToType subst2 lhsTyp, TNat), (rhsTyp, TNat)]) subst2 ctx2 freshId2)
-reconstructType tc (ESub lhs rhs) = do
-  (lhsTyp, tc2) <- reconstructType tc lhs
-  (rhsTyp, TypingContext constrs2 subst2 ctx2 freshId2) <- reconstructType tc2 rhs
-  return (TNat, TypingContext (constrs2 ++ [(applySubstsToType subst2 lhsTyp, TNat), (rhsTyp, TNat)]) subst2 ctx2 freshId2)
-reconstructType tc (EIf eCond eThen eElse) = do
-  (condTyp, tc2) <- reconstructType tc eCond
-  (thenTyp, tc3) <- reconstructType tc2 eThen
-  (elseTyp, TypingContext constrs3 subst3 ctx3 freshId3) <- reconstructType tc3 eElse
-  return (thenTyp, TypingContext (constrs3 ++ [(applySubstsToType subst3 condTyp, TBool), (applySubstsToType subst3 thenTyp, elseTyp)]) subst3 ctx3 freshId3)
-reconstructType tc (EIsZero e) = do
-  (eTyp, TypingContext constrs subst ctx freshId) <- reconstructType tc e
-  return (TBool, TypingContext (constrs ++ [(eTyp, TNat)]) subst ctx freshId)
-reconstructType (TypingContext constrs subst ctx freshId) (EAbs x eBody) = do
-  let paramType = TUVar (makeIdent freshId)
-  let ctx2 = Foil.addNameBinder x paramType ctx
-  (bodyTyp, TypingContext constrs2 subst2 ctx3 freshId2) <- reconstructType (TypingContext constrs subst ctx2 (freshId + 1)) eBody
-  let ctx4 = popNameBinder x ctx3
-  return (TArrow paramType bodyTyp, TypingContext constrs2 subst2 ctx4 freshId2)
-reconstructType tc (EApp eAbs eArg) = do
-  (absTyp, tc2) <- reconstructType tc eAbs
-  (argTyp, TypingContext constrs3 subst3 ctx3 freshId3) <- reconstructType tc2 eArg
-  let resultTyp = TUVar (makeIdent freshId3)
-  return (resultTyp, TypingContext (constrs3 ++ [(applySubstsToType subst3 absTyp, TArrow argTyp resultTyp)]) subst3 ctx3 (freshId3 + 1))
-reconstructType tc (ETyped e typ_) = do
+  put (TypingContext constrs subst ctx freshId2)
+  return specTyp
+reconstructType (ELet eWhat x eExpr) = do
+  whatTyp <- reconstructType eWhat
+  unifyTypeCheck
+  -- let whatTyp' = generalize whatTyp
+  exprTyp <- enterScope x whatTyp (reconstructType eExpr)
+  return exprTyp
+reconstructType (EAdd lhs rhs) = do
+  lhsTyp <- reconstructType lhs
+  rhsTyp <- reconstructType rhs
+  addConstraints [(lhsTyp, TNat), (rhsTyp, TNat)]
+  return TNat
+reconstructType (ESub lhs rhs) = do
+  lhsTyp <- reconstructType lhs
+  rhsTyp <- reconstructType rhs
+  addConstraints [(lhsTyp, TNat), (rhsTyp, TNat)]
+  return TNat
+reconstructType (EIf eCond eThen eElse) = do
+  condTyp <- reconstructType eCond
+  thenTyp <- reconstructType eThen
+  elseTyp <- reconstructType eElse
+  addConstraints [(condTyp, TBool), (thenTyp, elseTyp)]
+  return thenTyp
+reconstructType (EIsZero e) = do
+  eTyp  <- reconstructType e
+  addConstraints [(eTyp, TNat)]
+  return TBool
+reconstructType (EAbs x eBody) = do
+  paramType <- freshTypeVar
+  bodyTyp <- enterScope x paramType $
+    reconstructType eBody
+  return (TArrow paramType bodyTyp)
+reconstructType (EApp eAbs eArg) = do
+  absTyp <- reconstructType eAbs
+  argTyp <- reconstructType eArg
+  resultTyp <- freshTypeVar
+  addConstraints [(absTyp, TArrow argTyp resultTyp)]
+  return resultTyp
+reconstructType (ETyped e typ_) = do
   let typ = toTypeClosed typ_
-  (eTyp, TypingContext constrs2 subst2 ctx2 freshId2) <- reconstructType tc e
-  return (typ, TypingContext (constrs2 ++ [(eTyp, typ)]) subst2 ctx2 freshId2)
-reconstructType tc (EFor eFrom eTo x eBody) = do
-  (fromTyp, tc2) <- reconstructType tc eFrom
-  (toTyp, TypingContext constrs3 subst3 ctx3 freshId3) <- reconstructType tc2 eTo
-  let ctx4 = Foil.addNameBinder x TNat ctx3
-  (bodyTyp, TypingContext constrs4 subst4 ctx5 freshId4) <- reconstructType (TypingContext constrs3 subst3 ctx4 freshId3) eBody
-  let ctx6 = popNameBinder x ctx5
-  return (bodyTyp, TypingContext (constrs4 ++ [(applySubstsToType subst4 fromTyp, TNat), (applySubstsToType subst4 toTyp, TNat)]) subst4 ctx6 freshId4)
+  eTyp  <- reconstructType e
+  addConstraints [(eTyp, typ)]
+  return typ
+reconstructType (EFor eFrom eTo x eBody) = do
+  fromTyp <- reconstructType eFrom
+  toTyp <- reconstructType eTo
+  addConstraints [(fromTyp, TNat), (toTyp, TNat)]
+  bodyTyp <- enterScope x TNat $
+    reconstructType eBody
+  return bodyTyp
 
 allUVarsOfType :: Type' -> [Raw.UVarIdent]
 allUVarsOfType (TUVar ident) = [ident]
