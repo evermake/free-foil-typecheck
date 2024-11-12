@@ -32,7 +32,7 @@ import           Unsafe.Coerce               (unsafeCoerce)
 typecheckClosed
   :: Term Foil.VoidS {- exp -}
   -> Term Foil.VoidS {- type -}
-  -> Either String (Term Foil.VoidS) {- type -}
+  -> Either String (Maybe (Term Foil.VoidS)) {- type -}
 typecheckClosed = typecheck Foil.emptyNameMap
 
 type Context n = Foil.NameMap n (Maybe (Term n))
@@ -48,51 +48,57 @@ typecheck
   => Context n
   -> Term n {- exp -}
   -> Term n {- type -}
-  -> Either String (Term n) {- type -} -- TODO: convert to (Maybe (Term n))
+  -> Either String (Maybe (Term n)) {- type -} 
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
+  case typeOfE of
+    Just t -> do
   -- if typeOfE == expectedType
   -- if FreeFoil.alphaEquiv typeOfE expectedType -- TODO: figure out alphaEquiv
   --   then return typeOfE
   --   else
-  Left $
-    unlines
-      [ "expected type",
-        "  " ++ show expectedType,
-        "but got type",
-        "  " ++ Raw.printTree (fromTerm typeOfE),
-        "when typechecking expession",
-        "  " ++ show e
-      ]
+      Left $
+        unlines
+          [ "expected type",
+            "  " ++ show expectedType,
+            "but got type",
+            "  " ++ Raw.printTree (fromTerm t),
+            "when typechecking expession",
+            "  " ++ show e
+          ]
+    Nothing -> undefined -- TODO: figure out what to do here
 
 inferType
   :: (Foil.Distinct n)
   => Context n
   -> Term n
-  -> Either String (Term n) -- TODO: convert to (Maybe (Term n))
+  -> Either String (Maybe (Term n))
 inferType scope (FreeFoil.Var n) = -- Γ, x : T ⊢ x : T
   case (Foil.lookupName n scope) of 
-    Just t -> Right t
+    Just t -> Right (Just t)
     Nothing -> undefined -- TODO: figure out what to do here
-inferType _scope ETrue = return TBool
-inferType _scope EFalse = return TBool
-inferType _scope (ENat _) = return TNat
+inferType _scope ETrue = return (Just TBool)
+inferType _scope EFalse = return (Just TBool)
+inferType _scope (ENat _) = return (Just TNat)
 inferType scope (EAdd l r) = do
   _ <- typecheck scope l TNat
   _ <- typecheck scope r TNat
-  return TNat
+  return  (Just TNat)
 inferType scope (ESub l r) = do
   _ <- typecheck scope l TNat
   _ <- typecheck scope r TNat
-  return TNat
+  return (Just TNat)
 inferType scope (EIf eCond eThen eElse) = do
   _ <- typecheck scope eCond TBool
   typeOfThen <- inferType scope eThen
-  _ <- typecheck scope eElse typeOfThen
-  return typeOfThen
+  case typeOfThen of
+    Just t -> do 
+      _ <- typecheck scope eElse t
+      return (Just t)
+    Nothing -> undefined -- TODO: figure out what to do here
 inferType scope (EIsZero e) = do
   _ <- typecheck scope e TNat
-  return TBool
+  return (Just TBool)
 inferType scope (ETyped expr type_) = do
   typecheck scope expr type_
 inferType scope (ELet e1 (FoilPatternVar binder) e2) = do
@@ -100,24 +106,27 @@ inferType scope (ELet e1 (FoilPatternVar binder) e2) = do
     Foil.Distinct -> do
       -- Γ ⊢ let x = e1 in e2 : ?
       type1 <- inferType scope e1 -- Γ ⊢ e1 : type1
-
-      let newScope = extendContext binder (Just type1) scope -- Γ' = Γ, x : type1
+      let newScope = extendContext binder type1 scope -- Γ' = Γ, x : type1
       type' <- inferType newScope e2 -- Γ' ⊢ e2 : ?
-      unsinkType scope type'
+      case type' of
+        Just t' -> fmap Just (unsinkType scope t')
+        Nothing -> undefined -- TODO: figure out what to do here
 inferType scope (EAbs type_ (FoilPatternVar x) e) = do
   case Foil.assertDistinct x of
     Foil.Distinct -> do
       -- Γ ⊢ λx : type_. e : ?
       let newScope = extendContext x (Just type_) scope -- Γ' = Γ, x : type_
       type' <- inferType newScope e
-      TArrow type_ <$> unsinkType scope type'
+      case type' of
+        Just t' -> fmap (Just . (TArrow type_))  (unsinkType scope t')
+        Nothing -> undefined -- TODO: figure out what to do here
 inferType scope (EApp e1 e2) = do
   -- (Γ ⊢ e1) (Γ ⊢ e2) : ?
   type1 <- inferType scope e1 -- Γ ⊢ e1 : type1
   case type1 of
-    TArrow type_ types -> do
+    Just (TArrow type_ types) -> do
       _ <- typecheck scope e2 type_
-      return types
+      return (Just types)
     _ -> Left ("expected type\n  TArrow\nbut got type\n  " <> show type1)
 inferType scope (EFor e1 e2 (FoilPatternVar x) expr) = do
   case Foil.assertDistinct x of
@@ -126,19 +135,23 @@ inferType scope (EFor e1 e2 (FoilPatternVar x) expr) = do
       _ <- typecheck scope e2 TNat
       let newScope = extendContext x (Just TNat) scope
       type' <- inferType newScope expr
-      unsinkType scope type'
+      case type' of 
+        Just t' -> fmap Just (unsinkType scope t')
+        Nothing -> undefined -- TODO: figure out what to do here
 inferType scope (ETAbs pat@(FoilPatternVar x) e) = do  
   case Foil.assertDistinct x of
     Foil.Distinct -> do
       let newScope = extendContext x Nothing scope
       type' <- inferType newScope e
-      TForAll pat <$> unsinkType newScope type'
+      case type' of
+        Just t' -> fmap (Just . TForAll pat) (unsinkType newScope t')
+        Nothing -> undefined -- TODO: figure out what to do here
 inferType scope (ETApp e t) = do 
   eType <- inferType scope e
   case eType of
-    TForAll (FoilPatternVar binder) tbody -> do
+    Just (TForAll (FoilPatternVar binder) tbody) -> do
       let subst = Foil.addSubst Foil.identitySubst binder t
-        in return (FreeFoil.substitute (nameMapToScope scope) subst tbody)
+        in return (Just (FreeFoil.substitute (nameMapToScope scope) subst tbody))
     _ -> Left ("unexpected type application (not a forall)")
 inferType scope (TForAll (FoilPatternVar tv) _expr) = do
   let _newScope = extendContext tv Nothing scope
