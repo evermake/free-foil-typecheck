@@ -28,6 +28,7 @@ TNat.   Term ::= "Nat" ;
 TBool.  Term ::= "Bool" ;
 TArrow. Term ::= Term "->" Term ;
 TForAll. Term ::= "forall" Pattern "." ScopedTerm ;
+TType.  Term ::= "Type" ;
 
 -- ScopedTerm. ScopedTerm ::= Term ;
 

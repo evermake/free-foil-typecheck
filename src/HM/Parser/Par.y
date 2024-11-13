@@ -44,21 +44,22 @@ import HM.Parser.Lex
   '='         { PT _ (TS _ 9)         }
   'Bool'      { PT _ (TS _ 10)        }
   'Nat'       { PT _ (TS _ 11)        }
-  '['         { PT _ (TS _ 12)        }
-  ']'         { PT _ (TS _ 13)        }
-  'do'        { PT _ (TS _ 14)        }
-  'else'      { PT _ (TS _ 15)        }
-  'false'     { PT _ (TS _ 16)        }
-  'for'       { PT _ (TS _ 17)        }
-  'forall'    { PT _ (TS _ 18)        }
-  'if'        { PT _ (TS _ 19)        }
-  'in'        { PT _ (TS _ 20)        }
-  'iszero'    { PT _ (TS _ 21)        }
-  'let'       { PT _ (TS _ 22)        }
-  'then'      { PT _ (TS _ 23)        }
-  'true'      { PT _ (TS _ 24)        }
-  'Λ'         { PT _ (TS _ 25)        }
-  'λ'         { PT _ (TS _ 26)        }
+  'Type'      { PT _ (TS _ 12)        }
+  '['         { PT _ (TS _ 13)        }
+  ']'         { PT _ (TS _ 14)        }
+  'do'        { PT _ (TS _ 15)        }
+  'else'      { PT _ (TS _ 16)        }
+  'false'     { PT _ (TS _ 17)        }
+  'for'       { PT _ (TS _ 18)        }
+  'forall'    { PT _ (TS _ 19)        }
+  'if'        { PT _ (TS _ 20)        }
+  'in'        { PT _ (TS _ 21)        }
+  'iszero'    { PT _ (TS _ 22)        }
+  'let'       { PT _ (TS _ 23)        }
+  'then'      { PT _ (TS _ 24)        }
+  'true'      { PT _ (TS _ 25)        }
+  'Λ'         { PT _ (TS _ 26)        }
+  'λ'         { PT _ (TS _ 27)        }
   L_Ident     { PT _ (TV $$)          }
   L_integ     { PT _ (TI $$)          }
   L_UVarIdent { PT _ (T_UVarIdent $$) }
@@ -112,6 +113,7 @@ Term
   | 'Bool' { HM.Parser.Abs.TBool }
   | Term '->' Term { HM.Parser.Abs.TArrow $1 $3 }
   | 'forall' Pattern '.' ScopedTerm { HM.Parser.Abs.TForAll $2 $4 }
+  | 'Type' { HM.Parser.Abs.TType }
 
 ScopedTerm :: { HM.Parser.Abs.ScopedTerm }
 ScopedTerm : Term { HM.Parser.Abs.ScopedTerm $1 }

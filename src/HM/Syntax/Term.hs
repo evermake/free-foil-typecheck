@@ -52,155 +52,6 @@ mkConvertFromFreeFoil ''Raw.Term ''Raw.Ident ''Raw.ScopedTerm ''Raw.Pattern
 type Term n = AST FoilPattern TermSig n
 type Term' = Term Foil.VoidS
 
--- pattern ETrue :: Term n
--- pattern ETrue = Node ETrueSig
---
--- pattern EFalse :: Term n
--- pattern EFalse = Node EFalseSig
---
--- pattern ENat :: Integer -> Term n
--- pattern ENat n = Node (ENatSig n)
---
--- pattern EAdd :: Term n -> Term n -> Term n
--- pattern EAdd l r = Node (EAddSig l r)
---
--- pattern ESub :: Term n -> Term n -> Term n
--- pattern ESub l r = Node (ESubSig l r)
---
--- pattern EIf :: Term n -> Term n -> Term n -> Term n
--- pattern EIf cond a b = Node (EIfSig cond a b)
---
--- pattern EIsZero :: Term n -> Term n
--- pattern EIsZero x = Node (EIsZeroSig x)
---
--- pattern ETyped 
---   :: Term n {- exp -}
---     -> Term n {- type -}
---     -> Term n
--- pattern ETyped e t = Node (ETypedSig e t)
---
--- -- let x = e1 in e2 
--- pattern ELet 
---   :: Term n
---     -> FoilPattern n l 
---     -> Term l 
---     -> Term n
--- pattern ELet e1 x e2 = Node (ELetSig e1 (ScopedAST x e2))
---
--- pattern EAbs 
---   :: Term n
---     -> FoilPattern n l1 
---     -> Term l1 
---     -> Term n
--- pattern EAbs e1 x e2 = Node (EAbsSig e1 (ScopedAST x e2))
---
--- pattern EApp :: Term n -> Term n -> Term n
--- pattern EApp x0 x1 = Node (EAppSig x0 x1)
---
--- pattern ETAbs :: FoilPattern n l -> Term l -> Term n
--- pattern ETAbs tVar body = Node (ETAbsSig (ScopedAST b0 x0))
---
--- pattern ETApp :: Term n -> Term n -> Term n
--- pattern ETApp x0 x1 = Node (ETAppSig x0 x1)
---
--- pattern EFor 
---   :: Term n {- from -}
---     -> Term n {- to -}
---     -> FoilPattern n l {- iter -}
---     -> Term l {- body -}
---     -> Term n
--- pattern EFor a b i body = Node (EForSig a b (ScopedAST i body))
---
--- pattern TUVar :: Raw.UVarIdent -> Term n
--- pattern TUVar z0 = Node (TUVarSig z0)
---
--- pattern TNat :: Term n
--- pattern TNat = Node TNatSig
---
--- pattern TBool :: Term n
--- pattern TBool = Node TBoolSig
---
--- pattern TArrow ::
---           Term n
---           -> Term n -> Term n
--- pattern TArrow x0 x1 = Node (TArrowSig x0 x1)
---
--- pattern TForAll ::
---           FoilPattern n l0 -> Term l0 -> Term n
--- pattern TForAll b0 x0 = Node (TForAllSig (ScopedAST b0 x0))
-
--- data Term n where 
---   EVar 
---     :: NameBinder s n {- var -}
---     -> Term n
---   ETrue :: Term n 
---   EFalse :: Term n
---   ENat :: Term n 
---   EAdd :: Term n -> Term n -> Term n
---   ESub :: Term n -> Term n -> Term n
---
---   EIf
---     :: Term n {- condition -}
---     -> Term n {- if cond true -}
---     -> Term n {- if cond false -}
---     -> Term n
---
---   EIsZero :: Term n -> Term n 
---
---   ETyped 
---     :: Term n {- expression -}
---     -> Term n {- type -}
---     -> Term n 
---
---   ELet 
---     :: NameBinder n l {- var -}
---     -> Term n {- value -}
---     -> Term l {- body -}
---     -> Term n
---
---   EAbs 
---     :: NameBinder n l {- var -}
---     -> Term n {- type -}
---     -> Term l {- body -}
---     -> Term n 
---
---   ETAbs 
---     :: NameBinder n l {- type var -}
---     -> Term l {- body -}
---     -> Term n
---
---   ETApp 
---     :: Term n {- forall -}
---     -> Term n {- type -}
---     -> Term n
---
---   EFor 
---     :: NameBinder n l {- iterator -}
---     -> Term n {- value from -}
---     -> Term n {- value to -} 
---     -> Term l {- body -}
---     -> Term n
---
---   TUVar 
---     :: NameBinder s n 
---     -> Term n
---   TVar 
---     :: NameBinder s n 
---     -> Term n
---
---   TNat :: Term n 
---   TBool :: Term n 
---
---   TArrow 
---     :: NameBinder n l {- parameter -}
---     -> Term l {- body -}
---     -> Term n
---
---   TForAll 
---     :: NameBinder n l {- type parameter -}
---     -> Term l {- body -}
---     -> Term n
-
 -- ** Conversion helpers (terms)
 
 -- | Convert 'Raw.Term' into a scope-safe term.
@@ -223,10 +74,14 @@ fromTerm :: Term n -> Raw.Term
 fromTerm =
   convertFromAST
     convertFromTermSig
-    (\_ -> error "location missing")
+    -- (\_ -> error "location missing")
+    (Raw.EVar)
     fromFoilPattern
     Raw.ScopedTerm
-    (\_ -> error "location missing")
+    mkVarIdent
+  where
+    mkVarIdent n = Raw.Ident ("x" ++ show n)
+
 
 -- | Parse scope-safe terms via raw representation.
 --
@@ -244,9 +99,9 @@ instance Show (Term n) where
 -- | Determine if given Term is a type or not 
 -- isType :: Term n -> Bool
 -- isType (TUVar _) = True 
--- isType (TVar _) = True 
 -- isType (TNat) = True 
+-- isType (TType) = True 
 -- isType (TBool) = True 
 -- isType (TArrow _ _) = True 
--- isType (TFOrALl _ _) = True 
+-- isType (TForAll _ _) = True 
 -- isType _ = False
