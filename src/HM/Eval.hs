@@ -75,13 +75,15 @@ eval scope (EFor e1 e2 (FoilPatternVar xp) expr) = do
         eval scope (substitute (nameMapToScope scope) subst expr)
       return (last results)
     _ -> Left "Invalid expression in the range of for-loop"
-eval scope (ETApp e _) = eval scope e
-eval scope (ETAbs _pat e) = do 
-  case Foil.assertDistinct _pat of
-    Foil.Distinct -> do
-      case (unsinkType scope e) of 
-        Left s -> Left s 
-        Right e' -> eval scope e'
+eval scope (ETApp e t) = do 
+  e' <- eval scope e 
+  t' <- eval scope t
+  case e' of 
+    (ETAbs (FoilPatternVar xp) e) -> do 
+      let subst = addSubst identitySubst xp t'
+      eval scope (substitute (nameMapToScope scope) subst e)
+    _other -> Left ("Unexpected type application to " <> show _other)
+eval scope (ETAbs pat e) = Right (ETAbs pat e)
 
 eval _ (TNat) = Right TNat 
 eval _ (TType) = Right TType
