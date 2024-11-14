@@ -1,13 +1,15 @@
+{-# LANGUAGE DataKinds #-}
+
 module HM.Interpret where
 
-import Control.Monad.Foil (emptyScope)
+import Control.Monad.Foil (S (VoidS), emptyScope)
 import HM.Eval
 import HM.Parser.Par
-import HM.Syntax (toExpClosed)
+import HM.Syntax (Exp, toExpClosed)
 import HM.Typecheck
 
 data Result
-  = Success String -- Output of evaluation.
+  = Success (Exp VoidS) -- Output of evaluation.
   | Failure ErrorKind String -- Error kind with message.
   deriving (Show)
 
@@ -25,6 +27,6 @@ interpret input =
       Left err -> Failure TypecheckingError ("Typechecking error: " ++ err)
       Right _type -> case eval emptyScope e of
         Left err -> Failure EvaluationError ("Evaluation error: " ++ err)
-        Right outExp -> Success (show outExp)
+        Right outExp -> Success outExp
   where
     tokens = myLexer input

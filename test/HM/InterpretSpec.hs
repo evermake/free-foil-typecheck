@@ -3,6 +3,9 @@ module HM.InterpretSpec where
 import Control.Monad (forM_)
 import Data.List (sort)
 import HM.Interpret
+import HM.Parser.Lex (tokens)
+import HM.Parser.Par (myLexer, pExp, pType)
+import HM.Syntax (Type', toExpClosed, toTypeClosed)
 import System.Directory
 import System.FilePath
 import Test.Hspec
@@ -12,8 +15,11 @@ spec = parallel $ do
   describe "well-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/files/well-typed")
     forM_ (sort paths) $ \path -> it path $ do
+      -- TODO: fix
       contents <- readFile path
-      interpret contents `shouldSatisfy` isSuccess
+      expectedTypeContents <- readFile (replaceExtension path ".expected.lam")
+      expectedType <- toTypeClosed <$> pType (myLexer expectedTypeContents)
+      interpret contents `shouldSatisfy` (isSuccess expectedType)
 
   describe "ill-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/files/ill-typed")
@@ -21,7 +27,7 @@ spec = parallel $ do
       contents <- readFile path
       interpret contents `shouldSatisfy` isTypeError
 
-isSuccess :: Result -> Bool
+isSuccess :: Result -> Type' -> Bool
 isSuccess Success {} = True
 isSuccess _ = False
 
