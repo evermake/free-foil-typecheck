@@ -8,9 +8,9 @@ import Control.Monad.Foil
     addSubst,
     identitySubst,
   )
-import qualified Control.Monad.Foil          as Foil
+-- import qualified Control.Monad.Foil          as Foil
 import Control.Monad.Free.Foil (AST (Var), substitute)
-import HM.Typecheck (unsinkType, Context, nameMapToScope)
+import HM.Typecheck (Context, nameMapToScope)
 import HM.Syntax
 
 -- $setup
@@ -79,11 +79,11 @@ eval scope (ETApp e t) = do
   e' <- eval scope e 
   t' <- eval scope t
   case e' of 
-    (ETAbs (FoilPatternVar xp) e) -> do 
+    (ETAbs (FoilPatternVar xp) body) -> do 
       let subst = addSubst identitySubst xp t'
-      eval scope (substitute (nameMapToScope scope) subst e)
+      eval scope (substitute (nameMapToScope scope) subst body)
     _other -> Left ("Unexpected type application to " <> show _other)
-eval scope (ETAbs pat e) = Right (ETAbs pat e)
+eval _scope (ETAbs pat e) = Right (ETAbs pat e)
 
 eval _ (TNat) = Right TNat 
 eval _ (TType) = Right TType
