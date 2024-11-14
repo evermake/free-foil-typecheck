@@ -18,17 +18,16 @@ import           Unsafe.Coerce               (unsafeCoerce)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
--- >>> import HM.Parser.Abs (Type' (..))
 
 -- | Typechecks an expression and maybe returns an error.
--- >>> typecheckClosed "2 - (1 + 1)" TNat
--- Right TNat
--- >>> typecheckClosed "2 - (1 + true)" TNat
--- Left "expected type\n  TNat\nbut got type\n  Bool\nwhen typechecking expession\n  true\n"
--- >>> typecheckClosed "2 - (1 + 1)" TBool
--- Left "expected type\n  TBool\nbut got type\n  Nat\nwhen typechecking expession\n  2 - (1 + 1)\n"
--- >>> typecheckClosed "let x = 1 in let y = 2 in x + (let x = 3 in x + y)" TNat
--- Right TNat
+-- >>> typecheckClosed "2 - (1 + 1)" "Nat"
+-- Right Nat
+-- >>> typecheckClosed "2 - (1 + true)" "Nat"
+-- Left "expected type\n  Nat\nbut got type\n  Bool\nwhen typechecking expession\n  true\n"
+-- >>> typecheckClosed "2 - (1 + 1)" "Bool"
+-- Left "expected type\n  Bool\nbut got type\n  Nat\nwhen typechecking expession\n  2 - (1 + 1)\n"
+-- >>> typecheckClosed "let x = 1 in let y = 2 in x + (let x = 3 in x + y)" "Nat"
+-- Right Nat
 typecheckClosed
   :: Term Foil.VoidS {- exp -}
   -> Term Foil.VoidS {- type -}
@@ -37,18 +36,18 @@ typecheckClosed = typecheck Foil.emptyNameMap
 
 type Context n = Foil.NameMap n (Term n)
 
-extendContext :: Foil.Distinct n => Foil.NameBinder n l -> (Term n) -> Context n -> Context l
+extendContext :: Foil.Distinct n => Foil.NameBinder n l -> Term n -> Context n -> Context l
 extendContext binder type_ =
   case (Foil.assertExt binder, Foil.assertDistinct binder) of
     (Foil.Ext, Foil.Distinct) ->
-      fmap (Foil.sink) . Foil.addNameBinder binder type_
+      fmap Foil.sink . Foil.addNameBinder binder type_
 
 typecheck
   :: Foil.Distinct n
   => Context n
   -> Term n {- exp -}
   -> Term n {- type -}
-  -> Either String (Term n) {- type -} 
+  -> Either String (Term n) {- type -}
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
   -- case typeOfE of
@@ -74,9 +73,9 @@ inferType
   -> Term n
   -> Either String (Term n)
 inferType scope (FreeFoil.Var n) = -- Γ, x : T ⊢ x : T
-  case (Foil.lookupName n scope) of 
+  case (Foil.lookupName n scope) of
     TType -> Right (FreeFoil.Var n)
-    t -> Right t 
+    t     -> Right t
 inferType _scope ETrue = return TBool
 inferType _scope EFalse = return TBool
 inferType _scope (ENat _) = return TNat
@@ -129,20 +128,20 @@ inferType scope (EFor e1 e2 (FoilPatternVar x) expr) = do
       let newScope = extendContext x TNat scope
       type' <- inferType newScope expr
       unsinkType scope type'
-inferType scope (ETAbs pat@(FoilPatternVar x) e) = do  
+inferType scope (ETAbs pat@(FoilPatternVar x) e) = do
   case Foil.assertDistinct x of
     Foil.Distinct -> do
       let newScope = extendContext x TType scope
       type' <- inferType newScope e
       fmap (TForAll pat) (unsinkType newScope type')
-inferType scope (ETApp e t) = do 
+inferType scope (ETApp e t) = do
   eType <- inferType scope e
   case eType of
     TForAll (FoilPatternVar binder) tbody -> do
       let subst = Foil.addSubst Foil.identitySubst binder t
         in return (FreeFoil.substitute (nameMapToScope scope) subst tbody)
     _ -> Left ("unexpected type application (not a forall)")
-inferType _ (TNat) = Right TNat 
+inferType _ (TNat) = Right TNat
 inferType _ (TType) = Right TType
 inferType _ (TBool) = Right TBool
 inferType _ (TArrow l r) = Right (TArrow l r)
