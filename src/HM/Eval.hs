@@ -2,25 +2,24 @@
 
 module HM.Eval where
 
-import Control.Monad (forM)
-import Control.Monad.Foil
-  ( Distinct,
-    addSubst,
-    identitySubst,
-  )
+import           Control.Monad           (forM)
+import           Control.Monad.Foil      (Distinct, addSubst, identitySubst)
 -- import qualified Control.Monad.Foil          as Foil
-import Control.Monad.Free.Foil (AST (Var), substitute)
-import HM.Typecheck (Context, nameMapToScope)
-import HM.Syntax
+import           Control.Monad.Free.Foil (AST (Var), substitute)
+import           HM.Syntax
+import           HM.Typecheck            (Context, nameMapToScope)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
--- >>> import Control.Monad.Foil (emptyScope)
+-- >>> import Control.Monad.Foil (emptyNameMap)
 
--- >>> eval emptyScope "if (iszero (2 - (1 + 1))) then true else 0"
--- Right "true"
--- >>> eval emptyScope "if (iszero (2 - (true + 1))) then true else 0"
+-- |
+-- >>> eval emptyNameMap "if (iszero (2 - (1 + 1))) then true else 0"
+-- Right true
+-- >>> eval emptyNameMap "if (iszero (2 - (true + 1))) then true else 0"
 -- Left "Unsupported expression in addition"
+-- >>> eval emptyNameMap "ΛX. λx:X. x"
+-- Right Λ x0 . λ x1 : x0 . x1
 eval :: (Distinct n) => Context n -> Term n -> Either String (Term n)
 eval _scope (Var x) = Right (Var x)
 eval _scope ETrue = Right ETrue
@@ -31,19 +30,19 @@ eval scope (EAdd l r) = do
   r' <- eval scope r
   case (l', r') of
     (ENat x, ENat y) -> Right (ENat (x + y))
-    _ -> Left "Unsupported expression in addition"
+    _                -> Left "Unsupported expression in addition"
 eval scope (ESub l r) = do
   l' <- eval scope l
   r' <- eval scope r
   case (l', r') of
     (ENat x, ENat y) -> Right (ENat (x - y))
-    _ -> Left "Unsupported expression in subtraction"
+    _                -> Left "Unsupported expression in subtraction"
 eval scope (EIf cond then_ else_) = do
   cond' <- eval scope cond
   case cond' of
-    ETrue -> eval scope then_
+    ETrue  -> eval scope then_
     EFalse -> eval scope else_
-    _ -> Left "Unsupported condition in if statement"
+    _      -> Left "Unsupported condition in if statement"
 eval scope (EIsZero n) =
   eval scope n >>= \case
     ENat n'
@@ -75,19 +74,19 @@ eval scope (EFor e1 e2 (FoilPatternVar xp) expr) = do
         eval scope (substitute (nameMapToScope scope) subst expr)
       return (last results)
     _ -> Left "Invalid expression in the range of for-loop"
-eval scope (ETApp e t) = do 
-  e' <- eval scope e 
+eval scope (ETApp e t) = do
+  e' <- eval scope e
   t' <- eval scope t
-  case e' of 
-    (ETAbs (FoilPatternVar xp) body) -> do 
+  case e' of
+    ETAbs (FoilPatternVar xp) body -> do
       let subst = addSubst identitySubst xp t'
       eval scope (substitute (nameMapToScope scope) subst body)
     _other -> Left ("Unexpected type application to " <> show _other)
 eval _scope (ETAbs pat e) = Right (ETAbs pat e)
 
-eval _ (TNat) = Right TNat 
-eval _ (TType) = Right TType
-eval _ (TBool) = Right TBool
+eval _ TNat = Right TNat
+eval _ TType = Right TType
+eval _ TBool = Right TBool
 eval _ (TArrow l r) = Right (TArrow l r)
 eval _ (TForAll p b) = Right (TForAll p b)
 eval _ (TUVar n) = Right (TUVar n)
