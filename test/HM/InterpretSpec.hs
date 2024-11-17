@@ -1,11 +1,13 @@
 module HM.InterpretSpec where
 
 import Control.Monad (forM_)
-import Data.List (sort)
+import qualified Control.Monad.Foil as Foil
+import qualified Control.Monad.Free.Foil as Foil
+import Data.List
 import HM.Interpret
-import HM.Parser.Lex (tokens)
 import HM.Parser.Par (myLexer, pExp, pType)
-import HM.Syntax (Type', toExpClosed, toTypeClosed)
+import HM.Syntax (toExpClosed, toTypeClosed)
+import HM.Typecheck (inferTypeNewClosed)
 import System.Directory
 import System.FilePath
 import Test.Hspec
@@ -14,22 +16,16 @@ spec :: Spec
 spec = parallel $ do
   describe "well-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/files/well-typed")
-    forM_ (sort paths) $ \path -> it path $ do
-      -- TODO: fix
+    forM_ (sort (filter (\p -> not (".expected.lam" `isSuffixOf` p)) paths)) $ \path -> it path $ do
       contents <- readFile path
       expectedTypeContents <- readFile (replaceExtension path ".expected.lam")
-      expectedType <- toTypeClosed <$> pType (myLexer expectedTypeContents)
-      interpret contents `shouldSatisfy` (isSuccess expectedType)
+      programTypesMatch contents expectedTypeContents `shouldBe` Right True
 
   describe "ill-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/files/ill-typed")
     forM_ (sort paths) $ \path -> it path $ do
       contents <- readFile path
       interpret contents `shouldSatisfy` isTypeError
-
-isSuccess :: Result -> Type' -> Bool
-isSuccess Success {} = True
-isSuccess _ = False
 
 isTypeError :: Result -> Bool
 isTypeError (Failure TypecheckingError _) = True
@@ -55,3 +51,23 @@ dirWalk filefunc top = do
         if included
           then [top]
           else []
+
+programTypesMatch :: String -> String -> Either String Bool
+programTypesMatch actual expected = do
+  typeExpected <- toTypeClosed <$> pType tokensExpected
+  exprActual <- toExpClosed <$> pExp tokensActual
+  typeActual <- inferTypeNewClosed exprActual
+  case (Foil.alphaEquiv Foil.emptyScope typeActual typeExpected) of
+    True -> Right True
+    False ->
+      Left $
+        unlines
+          [ "types do not match",
+            "expected:",
+            show typeExpected,
+            "but actual is:",
+            show typeActual
+          ]
+  where
+    tokensActual = myLexer actual
+    tokensExpected = myLexer expected

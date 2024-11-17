@@ -7,7 +7,7 @@ main :: IO ()
 main = do
   sourceCode <- getContents
   case interpret sourceCode of
-    Success output -> putStrLn output
+    Success (outExpr, _) -> putStrLn (show outExpr)
     Failure errorKind errorMsg -> do
       putStrLn errorMsg
       exitWith (ExitFailure (errorCode errorKind))
