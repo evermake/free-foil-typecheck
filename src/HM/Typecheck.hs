@@ -63,6 +63,7 @@ unify1 c =
     (lhs, rhs) -> Left ("cannot unify " ++ show lhs ++ show rhs)
 
 infixr 6 +++
+
 (+++) :: [USubst'] -> [USubst'] -> [USubst']
 xs +++ ys = map (applySubstsInSubsts ys) xs ++ ys
 
@@ -76,7 +77,7 @@ unify (c : cs) = do
 unifyWith :: [USubst'] -> [Constraint] -> Either String [USubst']
 unifyWith substs constraints = unify (map (applySubstsToConstraint substs) constraints)
 
-newtype TypeCheck n a = TypeCheck { runTypeCheck :: TypingContext n -> Either String (a, TypingContext n) }
+newtype TypeCheck n a = TypeCheck {runTypeCheck :: TypingContext n -> Either String (a, TypingContext n)}
   deriving (Functor)
 
 -- instance Functor (TypeCheck n) where
@@ -105,7 +106,6 @@ instance Monad (TypeCheck n) where
   TypeCheck g >>= f = TypeCheck $ \tc -> do
     (x, tc') <- g tc
     runTypeCheck (f x) tc'
-
 
 applySubstsToConstraint :: [USubst'] -> Constraint -> Constraint
 applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
@@ -150,7 +150,7 @@ put new = TypeCheck $ \_old -> Right ((), new)
 
 eitherToTypeCheck :: Either String a -> TypeCheck n a
 eitherToTypeCheck (Left err) = TypeCheck $ \_tc -> Left err
-eitherToTypeCheck (Right x)  = TypeCheck $ \tc -> Right (x, tc)
+eitherToTypeCheck (Right x) = TypeCheck $ \tc -> Right (x, tc)
 
 unifyTypeCheck :: TypeCheck n ()
 unifyTypeCheck = do
@@ -162,8 +162,9 @@ enterScope :: Foil.NameBinder n l -> Type' -> TypeCheck l a -> TypeCheck n a
 enterScope binder type_ code = do
   TypingContext constraints substs ctx freshId <- get
   let ctx' = Foil.addNameBinder binder type_ ctx
-  (x, TypingContext constraints'' substs'' ctx'' freshId'') <- eitherToTypeCheck $
-    runTypeCheck code (TypingContext constraints substs ctx' freshId)
+  (x, TypingContext constraints'' substs'' ctx'' freshId'') <-
+    eitherToTypeCheck $
+      runTypeCheck code (TypingContext constraints substs ctx' freshId)
   let ctx''' = popNameBinder binder ctx''
   put (TypingContext constraints'' substs'' ctx''' freshId'')
   return x
@@ -200,9 +201,13 @@ reconstructType (FreeFoil.Var x) = do
 reconstructType (ELet eWhat x eExpr) = do
   whatTyp <- reconstructType eWhat
   unifyTypeCheck
-  -- let whatTyp' = generalize whatTyp
-  exprTyp <- enterScope x whatTyp (reconstructType eExpr)
-  return exprTyp
+  (TypingContext _ substs ctx _) <- get
+  let whatTyp1 = applySubstsToType substs whatTyp
+  let ctx' = fmap (applySubstsToType substs) ctx
+  let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
+  let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
+  let whatTyp2 = generalize whatFreeIdents whatTyp1
+  enterScope x whatTyp2 (reconstructType eExpr)
 reconstructType (EAdd lhs rhs) = do
   lhsTyp <- reconstructType lhs
   rhsTyp <- reconstructType rhs
@@ -220,13 +225,14 @@ reconstructType (EIf eCond eThen eElse) = do
   addConstraints [(condTyp, TBool), (thenTyp, elseTyp)]
   return thenTyp
 reconstructType (EIsZero e) = do
-  eTyp  <- reconstructType e
+  eTyp <- reconstructType e
   addConstraints [(eTyp, TNat)]
   return TBool
 reconstructType (EAbs x eBody) = do
   paramType <- freshTypeVar
-  bodyTyp <- enterScope x paramType $
-    reconstructType eBody
+  bodyTyp <-
+    enterScope x paramType $
+      reconstructType eBody
   return (TArrow paramType bodyTyp)
 reconstructType (EApp eAbs eArg) = do
   absTyp <- reconstructType eAbs
@@ -236,16 +242,15 @@ reconstructType (EApp eAbs eArg) = do
   return resultTyp
 reconstructType (ETyped e typ_) = do
   let typ = toTypeClosed typ_
-  eTyp  <- reconstructType e
+  eTyp <- reconstructType e
   addConstraints [(eTyp, typ)]
   return typ
 reconstructType (EFor eFrom eTo x eBody) = do
   fromTyp <- reconstructType eFrom
   toTyp <- reconstructType eTo
   addConstraints [(fromTyp, TNat), (toTyp, TNat)]
-  bodyTyp <- enterScope x TNat $
+  enterScope x TNat $
     reconstructType eBody
-  return bodyTyp
 
 allUVarsOfType :: Type' -> [Raw.UVarIdent]
 allUVarsOfType (TUVar ident) = [ident]
