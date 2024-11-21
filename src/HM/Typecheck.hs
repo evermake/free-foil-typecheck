@@ -48,7 +48,12 @@ typecheck
   -> Term n {- exp -}
   -> Term n {- type -}
   -> Either String (Term n) {- type -}
-typecheck scope (EAbsUntyped x e') (TArrow _ type_) = inferType scope (EAbsTyped type_ x e')
+-- typecheck scope (EAbsUntyped binder body) (TArrow argType _resultType) =
+typecheck scope (EAbsUntyped pat body) expectedType = do
+  case expectedType of
+    TArrow argType _resultType ->
+      typecheck scope (EAbsTyped argType pat body) expectedType
+    _ -> error ("unexpected λ-abstraction when typechecking against functional type: " <> show expectedType)
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
   -- case typeOfE of
@@ -113,7 +118,7 @@ inferType scope (EAbsTyped type_ (FoilPatternVar x) e) = do
       let newScope = extendContext x type_ scope -- Γ' = Γ, x : type_
       type' <- inferType newScope e
       fmap (TArrow type_)  (unsinkType scope type')
-inferType _scope (EAbsUntyped _ _) = undefined -- TODO
+inferType _scope (EAbsUntyped _ _) = error "cannot infer λ-abstraction without explicit type annotation for the argument" -- TODO
 inferType scope (EApp e1 e2) = do
   -- (Γ ⊢ e1) (Γ ⊢ e2) : ?
   type1 <- inferType scope e1 -- Γ ⊢ e1 : type1

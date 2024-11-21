@@ -1,1 +1,1 @@
-let id = (ΛX. λx:X. x) : forall Y. Y -> Y
+let id = (ΛX. λx:X. x) in id : forall Y. Y -> Y

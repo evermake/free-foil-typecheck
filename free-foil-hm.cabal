@@ -14,7 +14,7 @@ bug-reports:    https://github.com/evermake/free-foil-hm/issues
 build-type:     Custom
 extra-source-files:
     README.md
-    grammar/bidirectional-typing.cf
+    grammar/hindley-milner.cf
 
 source-repository head
   type: git
