@@ -97,7 +97,8 @@ Term1 :: { HM.Parser.Abs.Term }
 Term1
   : 'if' Term1 'then' Term1 'else' Term1 { HM.Parser.Abs.EIf $2 $4 $6 }
   | 'let' Pattern '=' Term1 'in' ScopedTerm { HM.Parser.Abs.ELet $2 $4 $6 }
-  | 'λ' Pattern ':' Term '.' ScopedTerm { HM.Parser.Abs.EAbs $2 $4 $6 }
+  | 'λ' Pattern ':' Term '.' ScopedTerm { HM.Parser.Abs.EAbsTyped $2 $4 $6 }
+  | 'λ' Pattern '.' ScopedTerm { HM.Parser.Abs.EAbsUntyped $2 $4 }
   | Term1 Term2 { HM.Parser.Abs.EApp $1 $2 }
   | 'Λ' Pattern '.' ScopedTerm { HM.Parser.Abs.ETAbs $2 $4 }
   | Term1 '[' Term ']' { HM.Parser.Abs.ETApp $1 $3 }

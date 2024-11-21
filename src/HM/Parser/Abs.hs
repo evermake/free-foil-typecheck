@@ -29,7 +29,8 @@ data Term
     | EIsZero Term
     | ETyped Term Term
     | ELet Pattern Term ScopedTerm
-    | EAbs Pattern Term ScopedTerm
+    | EAbsTyped Pattern Term ScopedTerm
+    | EAbsUntyped Pattern ScopedTerm
     | EApp Term Term
     | ETAbs Pattern ScopedTerm
     | ETApp Term Term

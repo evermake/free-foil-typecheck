@@ -48,6 +48,7 @@ typecheck
   -> Term n {- exp -}
   -> Term n {- type -}
   -> Either String (Term n) {- type -}
+typecheck scope (EAbsUntyped x e') (TArrow _ type_) = inferType scope (EAbsTyped type_ x e')
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
   -- case typeOfE of
@@ -105,13 +106,14 @@ inferType scope (ELet e1 (FoilPatternVar binder) e2) = do
       let newScope = extendContext binder type1 scope -- Γ' = Γ, x : type1
       type' <- inferType newScope e2 -- Γ' ⊢ e2 : ?
       unsinkType scope type'
-inferType scope (EAbs type_ (FoilPatternVar x) e) = do
+inferType scope (EAbsTyped type_ (FoilPatternVar x) e) = do
   case Foil.assertDistinct x of
     Foil.Distinct -> do
       -- Γ ⊢ λx : type_. e : ?
       let newScope = extendContext x type_ scope -- Γ' = Γ, x : type_
       type' <- inferType newScope e
       fmap (TArrow type_)  (unsinkType scope type')
+inferType _scope (EAbsUntyped _ _) = undefined -- TODO
 inferType scope (EApp e1 e2) = do
   -- (Γ ⊢ e1) (Γ ⊢ e2) : ?
   type1 <- inferType scope e1 -- Γ ⊢ e1 : type1

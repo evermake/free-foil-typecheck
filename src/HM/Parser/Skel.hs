@@ -39,7 +39,8 @@ transTerm x = case x of
   HM.Parser.Abs.EIsZero term -> failure x
   HM.Parser.Abs.ETyped term1 term2 -> failure x
   HM.Parser.Abs.ELet pattern_ term scopedterm -> failure x
-  HM.Parser.Abs.EAbs pattern_ term scopedterm -> failure x
+  HM.Parser.Abs.EAbsTyped pattern_ term scopedterm -> failure x
+  HM.Parser.Abs.EAbsUntyped pattern_ scopedterm -> failure x
   HM.Parser.Abs.EApp term1 term2 -> failure x
   HM.Parser.Abs.ETAbs pattern_ scopedterm -> failure x
   HM.Parser.Abs.ETApp term1 term2 -> failure x

@@ -40,7 +40,7 @@ deriveBitraversable ''TermSig
 -- ** Pattern synonyms
 
 mkPatternSynonyms ''TermSig
-{-# COMPLETE Var, ETrue, EFalse, ENat, EAdd, ESub, EIf, EIsZero, ETyped, ELet, EAbs, EApp, ETApp, ETAbs, EFor, TUVar, TNat, TBool, TArrow, TForAll #-}
+{-# COMPLETE Var, ETrue, EFalse, ENat, EAdd, ESub, EIf, EIsZero, ETyped, ELet, EAbsTyped, EAbsUntyped, EApp, ETApp, ETAbs, EFor, TUVar, TNat, TBool, TArrow, TForAll #-}
 
 -- ** Conversion helpers
 

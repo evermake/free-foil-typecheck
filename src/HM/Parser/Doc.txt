@@ -61,6 +61,7 @@ All other symbols are terminals.
   | //Term1// | -> | ``if`` //Term1// ``then`` //Term1// ``else`` //Term1//
   |  |  **|**  | ``let`` //Pattern// ``=`` //Term1// ``in`` //ScopedTerm//
   |  |  **|**  | ``λ`` //Pattern// ``:`` //Term// ``.`` //ScopedTerm//
+  |  |  **|**  | ``λ`` //Pattern// ``.`` //ScopedTerm//
   |  |  **|**  | //Term1// //Term2//
   |  |  **|**  | ``Λ`` //Pattern// ``.`` //ScopedTerm//
   |  |  **|**  | //Term1// ``[`` //Term// ``]``

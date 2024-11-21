@@ -54,12 +54,13 @@ eval scope (ELet e1 (FoilPatternVar xp) e2) = do
   e1' <- eval scope e1
   let subst = addSubst identitySubst xp e1'
   eval scope (substitute (nameMapToScope scope) subst e2)
-eval _scope (EAbs type_ x e) = Right (EAbs type_ x e)
+eval _scope (EAbsTyped type_ x e) = Right (EAbsTyped type_ x e)
+eval _scope (EAbsUntyped _ _) = undefined
 eval scope (EApp e1 e2) = do
   e1' <- eval scope e1
   e2' <- eval scope e2
   case e1' of
-    EAbs _ (FoilPatternVar xp) e -> do
+    EAbsTyped _ (FoilPatternVar xp) e -> do
       let subst = addSubst identitySubst xp e2'
       eval scope (substitute (nameMapToScope scope) subst e)
     _ -> Left "Unsupported expression in application"
