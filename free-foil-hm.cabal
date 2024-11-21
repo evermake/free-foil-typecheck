@@ -119,7 +119,7 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      HM.InterpretSpec
+      HM.TypecheckSpec
       Paths_free_foil_hm
   hs-source-dirs:
       test

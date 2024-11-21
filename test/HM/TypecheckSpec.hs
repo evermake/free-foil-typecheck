@@ -1,4 +1,4 @@
-module HM.InterpretSpec where
+module HM.TypecheckSpec where
 
 import Control.Monad (forM_)
 import qualified Control.Monad.Foil as Foil
