@@ -55,7 +55,7 @@ eval scope (ELet e1 (FoilPatternVar xp) e2) = do
   let subst = addSubst identitySubst xp e1'
   eval scope (substitute (nameMapToScope scope) subst e2)
 eval _scope (EAbsTyped type_ x e) = Right (EAbsTyped type_ x e)
-eval _scope (EAbsUntyped _ _) = undefined
+eval _scope (EAbsUntyped x e) = Right (EAbsUntyped x e)
 eval scope (EApp e1 e2) = do
   e1' <- eval scope e1
   e2' <- eval scope e2

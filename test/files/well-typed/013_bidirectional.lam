@@ -1,0 +1,1 @@
+if false then (λf:Bool. f) else (λx. x) : Bool -> Bool
