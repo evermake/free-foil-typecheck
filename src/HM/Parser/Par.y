@@ -14,6 +14,8 @@ module HM.Parser.Par
   , pExp1
   , pExp
   , pScopedExp
+  , pType2
+  , pType1
   , pType
   , pScopedType
   , pTypePattern
@@ -32,6 +34,8 @@ import HM.Parser.Lex
 %name pExp1 Exp1
 %name pExp Exp
 %name pScopedExp ScopedExp
+%name pType2 Type2
+%name pType1 Type1
 %name pType Type
 %name pScopedType ScopedType
 %name pTypePattern TypePattern
@@ -112,17 +116,25 @@ Exp : Exp1 ':' Type { HM.Parser.Abs.ETyped $1 $3 } | Exp1 { $1 }
 ScopedExp :: { HM.Parser.Abs.ScopedExp }
 ScopedExp : Exp1 { HM.Parser.Abs.ScopedExp $1 }
 
-Type :: { HM.Parser.Abs.Type }
-Type
+Type2 :: { HM.Parser.Abs.Type }
+Type2
   : UVarIdent { HM.Parser.Abs.TUVar $1 }
   | 'Nat' { HM.Parser.Abs.TNat }
   | 'Bool' { HM.Parser.Abs.TBool }
-  | Type '->' Type { HM.Parser.Abs.TArrow $1 $3 }
   | Ident { HM.Parser.Abs.TVar $1 }
-  | 'forall' TypePattern '.' ScopedType { HM.Parser.Abs.TForAll $2 $4 }
+  | '(' Type ')' { $2 }
+
+Type1 :: { HM.Parser.Abs.Type }
+Type1
+  : Type2 '->' Type1 { HM.Parser.Abs.TArrow $1 $3 } | Type2 { $1 }
+
+Type :: { HM.Parser.Abs.Type }
+Type
+  : 'forall' TypePattern '.' ScopedType { HM.Parser.Abs.TForAll $2 $4 }
+  | Type1 { $1 }
 
 ScopedType :: { HM.Parser.Abs.ScopedType }
-ScopedType : Type { HM.Parser.Abs.ScopedType $1 }
+ScopedType : Type1 { HM.Parser.Abs.ScopedType $1 }
 
 TypePattern :: { HM.Parser.Abs.TypePattern }
 TypePattern : Ident { HM.Parser.Abs.TPatternVar $1 }

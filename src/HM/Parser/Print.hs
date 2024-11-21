@@ -167,16 +167,16 @@ instance Print HM.Parser.Abs.ScopedExp where
 
 instance Print HM.Parser.Abs.Type where
   prt i = \case
-    HM.Parser.Abs.TUVar uvarident -> prPrec i 0 (concatD [prt 0 uvarident])
-    HM.Parser.Abs.TNat -> prPrec i 0 (concatD [doc (showString "Nat")])
-    HM.Parser.Abs.TBool -> prPrec i 0 (concatD [doc (showString "Bool")])
-    HM.Parser.Abs.TArrow type_1 type_2 -> prPrec i 0 (concatD [prt 0 type_1, doc (showString "->"), prt 0 type_2])
-    HM.Parser.Abs.TVar id_ -> prPrec i 0 (concatD [prt 0 id_])
+    HM.Parser.Abs.TUVar uvarident -> prPrec i 2 (concatD [prt 0 uvarident])
+    HM.Parser.Abs.TNat -> prPrec i 2 (concatD [doc (showString "Nat")])
+    HM.Parser.Abs.TBool -> prPrec i 2 (concatD [doc (showString "Bool")])
+    HM.Parser.Abs.TArrow type_1 type_2 -> prPrec i 1 (concatD [prt 2 type_1, doc (showString "->"), prt 1 type_2])
+    HM.Parser.Abs.TVar id_ -> prPrec i 2 (concatD [prt 0 id_])
     HM.Parser.Abs.TForAll typepattern scopedtype -> prPrec i 0 (concatD [doc (showString "forall"), prt 0 typepattern, doc (showString "."), prt 0 scopedtype])
 
 instance Print HM.Parser.Abs.ScopedType where
   prt i = \case
-    HM.Parser.Abs.ScopedType type_ -> prPrec i 0 (concatD [prt 0 type_])
+    HM.Parser.Abs.ScopedType type_ -> prPrec i 0 (concatD [prt 1 type_])
 
 instance Print HM.Parser.Abs.TypePattern where
   prt i = \case

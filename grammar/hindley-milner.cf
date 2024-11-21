@@ -21,13 +21,20 @@ ScopedExp. ScopedExp ::= Exp1 ;
 -- https://bnfc.readthedocs.io/en/latest/lbnf.html#coercions
 coercions Exp 3 ;
 
-TUVar.   Type ::= UVarIdent ;
-TNat.    Type ::= "Nat" ;
-TBool.   Type ::= "Bool" ;
-TArrow.  Type ::= Type "->" Type ;
-TVar.    Type ::= Ident ;
+-- a -> b -> c
+-- (a -> b) -> c
+-- a -> (b -> c)
+TUVar.   Type2 ::= UVarIdent ;
+TNat.    Type2 ::= "Nat" ;
+TBool.   Type2 ::= "Bool" ;
+TArrow.  Type1 ::= Type2 "->" Type1 ;
+TVar.    Type2 ::= Ident ;
 TForAll. Type ::= "forall" TypePattern "." ScopedType ;
+-- _. Type ::= Type1 ;
+-- _. Type1 ::= Type2 ;
+-- _. Type2 ::= "(" Type ")" ;
+coercions Type 2 ;
 
-ScopedType. ScopedType ::= Type ;
+ScopedType. ScopedType ::= Type1 ;
 
 TPatternVar. TypePattern ::= Ident ;
