@@ -7,7 +7,7 @@ import Data.List
 import HM.Interpret
 import HM.Parser.Par (myLexer, pExp, pType)
 import HM.Syntax (toExpClosed, toTypeClosed)
-import HM.Typecheck (inferTypeNewClosed)
+import HM.Typecheck (allUVarsOfType, generalize, inferTypeNewClosed)
 import System.Directory
 import System.FilePath
 import Test.Hspec
@@ -55,9 +55,13 @@ dirWalk filefunc top = do
 programTypesMatch :: String -> String -> Either String Bool
 programTypesMatch actual expected = do
   typeExpected <- toTypeClosed <$> pType tokensExpected
+  let vars = allUVarsOfType typeExpected
+  let genExpected = generalize vars typeExpected
   exprActual <- toExpClosed <$> pExp tokensActual
   typeActual <- inferTypeNewClosed exprActual
-  case (Foil.alphaEquiv Foil.emptyScope typeActual typeExpected) of
+  let vars' = allUVarsOfType typeActual
+  let genActual = generalize vars' typeActual
+  case (Foil.alphaEquiv Foil.emptyScope genActual genExpected) of
     True -> Right True
     False ->
       Left $
