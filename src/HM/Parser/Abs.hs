@@ -38,9 +38,9 @@ data Term
     | TUVar UVarIdent
     | TNat
     | TBool
+    | TType
     | TArrow Term Term
     | TForAll Pattern ScopedTerm
-    | TType
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data ScopedTerm = ScopedTerm Term

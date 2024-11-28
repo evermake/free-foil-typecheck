@@ -53,10 +53,15 @@ All other symbols are terminals.
   |  |  **|**  | ``true``
   |  |  **|**  | ``false``
   |  |  **|**  | //Integer//
+  |  |  **|**  | //UVarIdent//
+  |  |  **|**  | ``Nat``
+  |  |  **|**  | ``Bool``
+  |  |  **|**  | ``Type``
   |  |  **|**  | ``(`` //Term// ``)``
   | //Term2// | -> | //Term2// ``+`` //Term3//
   |  |  **|**  | //Term2// ``-`` //Term3//
   |  |  **|**  | ``iszero`` ``(`` //Term// ``)``
+  |  |  **|**  | //Term3// ``->`` //Term2//
   |  |  **|**  | //Term3//
   | //Term1// | -> | ``if`` //Term1// ``then`` //Term1// ``else`` //Term1//
   |  |  **|**  | ``let`` //Pattern// ``=`` //Term1// ``in`` //ScopedTerm//
@@ -66,16 +71,11 @@ All other symbols are terminals.
   |  |  **|**  | ``Λ`` //Pattern// ``.`` //ScopedTerm//
   |  |  **|**  | //Term1// ``[`` //Term// ``]``
   |  |  **|**  | ``for`` //Pattern// ``in`` ``[`` //Term1// ``..`` //Term1// ``]`` ``do`` //ScopedTerm//
+  |  |  **|**  | ``forall`` //Pattern// ``.`` //ScopedTerm//
   |  |  **|**  | //Term2//
   | //Term// | -> | //Term1// ``:`` //Term//
   |  |  **|**  | //Term1//
-  |  |  **|**  | //UVarIdent//
-  |  |  **|**  | ``Nat``
-  |  |  **|**  | ``Bool``
-  |  |  **|**  | //Term// ``->`` //Term//
-  |  |  **|**  | ``forall`` //Pattern// ``.`` //ScopedTerm//
-  |  |  **|**  | ``Type``
-  | //ScopedTerm// | -> | //Term//
+  | //ScopedTerm// | -> | //Term1//
 
 
 

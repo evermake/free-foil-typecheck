@@ -49,6 +49,16 @@ typecheck
   -> Term n {- type -}
   -> Either String (Term n) {- type -}
 -- typecheck scope (EAbsUntyped binder body) (TArrow argType _resultType) =
+typecheck scope (EIf eCond eThen eElse) expectedType = do 
+  _ <- typecheck scope eCond TBool 
+  _ <- typecheck scope eThen expectedType 
+  typecheck scope eElse expectedType
+typecheck scope (ELet e1 (FoilPatternVar binder) e2) expectedType = do 
+  case Foil.assertDistinct binder of
+    Foil.Distinct -> do
+      type1 <- inferType scope e1 
+      let newScope = extendContext binder type1 scope 
+      typecheck newScope e2 expectedType -- FIXME
 typecheck scope (EAbsUntyped pat body) expectedType = do
   case expectedType of
     TArrow argType _resultType ->
@@ -56,10 +66,7 @@ typecheck scope (EAbsUntyped pat body) expectedType = do
     _ -> error ("unexpected λ-abstraction when typechecking against functional type: " <> show expectedType)
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
-  -- case typeOfE of
-  --   Just t -> do
-  -- if typeOfE == expectedType
-  if FreeFoil.alphaEquiv (nameMapToScope scope) typeOfE expectedType -- TODO: figure out alphaEquiv
+  if FreeFoil.alphaEquiv (nameMapToScope scope) typeOfE expectedType 
     then return typeOfE
     else
       Left $
@@ -71,7 +78,6 @@ typecheck scope e expectedType = do
             "when typechecking expession",
             "  " ++ show e
           ]
-    -- Nothing -> undefined -- TODO: figure out what to do here
 
 inferType
   :: (Foil.Distinct n)

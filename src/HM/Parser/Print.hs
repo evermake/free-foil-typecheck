@@ -163,13 +163,13 @@ instance Print HM.Parser.Abs.Term where
     HM.Parser.Abs.ETAbs pattern_ scopedterm -> prPrec i 1 (concatD [doc (showString "\923"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
     HM.Parser.Abs.ETApp term1 term2 -> prPrec i 1 (concatD [prt 1 term1, doc (showString "["), prt 0 term2, doc (showString "]")])
     HM.Parser.Abs.EFor pattern_ term1 term2 scopedterm -> prPrec i 1 (concatD [doc (showString "for"), prt 0 pattern_, doc (showString "in"), doc (showString "["), prt 1 term1, doc (showString ".."), prt 1 term2, doc (showString "]"), doc (showString "do"), prt 0 scopedterm])
-    HM.Parser.Abs.TUVar uvarident -> prPrec i 0 (concatD [prt 0 uvarident])
-    HM.Parser.Abs.TNat -> prPrec i 0 (concatD [doc (showString "Nat")])
-    HM.Parser.Abs.TBool -> prPrec i 0 (concatD [doc (showString "Bool")])
-    HM.Parser.Abs.TArrow term1 term2 -> prPrec i 0 (concatD [prt 0 term1, doc (showString "->"), prt 0 term2])
-    HM.Parser.Abs.TForAll pattern_ scopedterm -> prPrec i 0 (concatD [doc (showString "forall"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
-    HM.Parser.Abs.TType -> prPrec i 0 (concatD [doc (showString "Type")])
+    HM.Parser.Abs.TUVar uvarident -> prPrec i 3 (concatD [prt 0 uvarident])
+    HM.Parser.Abs.TNat -> prPrec i 3 (concatD [doc (showString "Nat")])
+    HM.Parser.Abs.TBool -> prPrec i 3 (concatD [doc (showString "Bool")])
+    HM.Parser.Abs.TType -> prPrec i 3 (concatD [doc (showString "Type")])
+    HM.Parser.Abs.TArrow term1 term2 -> prPrec i 2 (concatD [prt 3 term1, doc (showString "->"), prt 2 term2])
+    HM.Parser.Abs.TForAll pattern_ scopedterm -> prPrec i 1 (concatD [doc (showString "forall"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
 
 instance Print HM.Parser.Abs.ScopedTerm where
   prt i = \case
-    HM.Parser.Abs.ScopedTerm term -> prPrec i 0 (concatD [prt 0 term])
+    HM.Parser.Abs.ScopedTerm term -> prPrec i 0 (concatD [prt 1 term])

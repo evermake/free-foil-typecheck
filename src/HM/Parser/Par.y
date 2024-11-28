@@ -84,6 +84,10 @@ Term3
   | 'true' { HM.Parser.Abs.ETrue }
   | 'false' { HM.Parser.Abs.EFalse }
   | Integer { HM.Parser.Abs.ENat $1 }
+  | UVarIdent { HM.Parser.Abs.TUVar $1 }
+  | 'Nat' { HM.Parser.Abs.TNat }
+  | 'Bool' { HM.Parser.Abs.TBool }
+  | 'Type' { HM.Parser.Abs.TType }
   | '(' Term ')' { $2 }
 
 Term2 :: { HM.Parser.Abs.Term }
@@ -91,6 +95,7 @@ Term2
   : Term2 '+' Term3 { HM.Parser.Abs.EAdd $1 $3 }
   | Term2 '-' Term3 { HM.Parser.Abs.ESub $1 $3 }
   | 'iszero' '(' Term ')' { HM.Parser.Abs.EIsZero $3 }
+  | Term3 '->' Term2 { HM.Parser.Abs.TArrow $1 $3 }
   | Term3 { $1 }
 
 Term1 :: { HM.Parser.Abs.Term }
@@ -103,21 +108,14 @@ Term1
   | 'Λ' Pattern '.' ScopedTerm { HM.Parser.Abs.ETAbs $2 $4 }
   | Term1 '[' Term ']' { HM.Parser.Abs.ETApp $1 $3 }
   | 'for' Pattern 'in' '[' Term1 '..' Term1 ']' 'do' ScopedTerm { HM.Parser.Abs.EFor $2 $5 $7 $10 }
+  | 'forall' Pattern '.' ScopedTerm { HM.Parser.Abs.TForAll $2 $4 }
   | Term2 { $1 }
 
 Term :: { HM.Parser.Abs.Term }
-Term
-  : Term1 ':' Term { HM.Parser.Abs.ETyped $1 $3 }
-  | Term1 { $1 }
-  | UVarIdent { HM.Parser.Abs.TUVar $1 }
-  | 'Nat' { HM.Parser.Abs.TNat }
-  | 'Bool' { HM.Parser.Abs.TBool }
-  | Term '->' Term { HM.Parser.Abs.TArrow $1 $3 }
-  | 'forall' Pattern '.' ScopedTerm { HM.Parser.Abs.TForAll $2 $4 }
-  | 'Type' { HM.Parser.Abs.TType }
+Term : Term1 ':' Term { HM.Parser.Abs.ETyped $1 $3 } | Term1 { $1 }
 
 ScopedTerm :: { HM.Parser.Abs.ScopedTerm }
-ScopedTerm : Term { HM.Parser.Abs.ScopedTerm $1 }
+ScopedTerm : Term1 { HM.Parser.Abs.ScopedTerm $1 }
 
 {
 
