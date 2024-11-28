@@ -4,7 +4,7 @@ github: "evermake/free-foil-hm"
 
 extra-source-files:
   - README.md
-  - grammar/hindley-milner.cf
+  - grammar/bidirectional-typing.cf
 
 synopsis: Hindley-Milner type system implementation powered by Free Foil.
 category: Language
