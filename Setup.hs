@@ -36,9 +36,9 @@ main =
                 [ "chcp.com" | isWindows ] <>
                 [ "chcp.com 65001" | isWindows ] <>
                 [ "cp grammar/hindley-milner.cf grammar/Parser.cf"  -- Workaround to customize generated package name
-                , "bnfc --haskell -d -p HM --generic -o src grammar/Parser.cf"
+                , "bnfc --haskell -d -p HindleyMilner --generic -o src grammar/Parser.cf"
                 , "rm grammar/Parser.cf"
-                , "cd src/HM/Parser"
+                , "cd src/HindleyMilner/Parser"
                 , "alex Lex.x"
                 , "happy Par.y"
                 , "true"

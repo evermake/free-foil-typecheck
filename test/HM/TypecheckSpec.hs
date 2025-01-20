@@ -1,13 +1,13 @@
-module HM.TypecheckSpec where
+module HindleyMilner.TypecheckSpec where
 
 import Control.Monad (forM_)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as Foil
 import Data.List
-import HM.Interpret
-import HM.Parser.Par (myLexer, pExp, pType)
-import HM.Syntax (toExpClosed, toTypeClosed)
-import HM.Typecheck (allUVarsOfType, generalize, inferTypeNewClosed)
+import HindleyMilner.Interpret
+import HindleyMilner.Parser.Par (myLexer, pExp, pType)
+import HindleyMilner.Syntax (toExpClosed, toTypeClosed)
+import HindleyMilner.Typecheck (allUVarsOfType, generalize, inferTypeNewClosed)
 import System.Directory
 import System.FilePath
 import Test.Hspec

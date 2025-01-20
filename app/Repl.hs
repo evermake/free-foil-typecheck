@@ -1,10 +1,10 @@
 module Main where
 
 import Control.Monad.Foil (emptyScope)
-import HM.Eval
-import HM.Parser.Par
-import HM.Syntax (toExpClosed)
-import HM.Typecheck
+import HindleyMilner.Eval
+import HindleyMilner.Parser.Par
+import HindleyMilner.Syntax (toExpClosed)
+import HindleyMilner.Typecheck
 
 main :: IO ()
 main = do

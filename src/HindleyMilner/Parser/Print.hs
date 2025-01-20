@@ -7,9 +7,9 @@
 {-# LANGUAGE OverlappingInstances #-}
 #endif
 
--- | Pretty-printer for HM.
+-- | Pretty-printer for HindleyMilner.
 
-module HM.Parser.Print where
+module HindleyMilner.Parser.Print where
 
 import Prelude
   ( ($), (.)
@@ -20,7 +20,7 @@ import Prelude
   , all, elem, foldr, id, map, null, replicate, shows, span
   )
 import Data.Char ( Char, isSpace )
-import qualified HM.Parser.Abs
+import qualified HindleyMilner.Parser.Abs
 
 -- | The top-level printing method.
 
@@ -137,47 +137,47 @@ instance Print Integer where
 instance Print Double where
   prt _ x = doc (shows x)
 
-instance Print HM.Parser.Abs.Ident where
-  prt _ (HM.Parser.Abs.Ident i) = doc $ showString i
-instance Print HM.Parser.Abs.UVarIdent where
-  prt _ (HM.Parser.Abs.UVarIdent i) = doc $ showString i
-instance Print HM.Parser.Abs.Pattern where
+instance Print HindleyMilner.Parser.Abs.Ident where
+  prt _ (HindleyMilner.Parser.Abs.Ident i) = doc $ showString i
+instance Print HindleyMilner.Parser.Abs.UVarIdent where
+  prt _ (HindleyMilner.Parser.Abs.UVarIdent i) = doc $ showString i
+instance Print HindleyMilner.Parser.Abs.Pattern where
   prt i = \case
-    HM.Parser.Abs.PatternVar id_ -> prPrec i 0 (concatD [prt 0 id_])
+    HindleyMilner.Parser.Abs.PatternVar id_ -> prPrec i 0 (concatD [prt 0 id_])
 
-instance Print HM.Parser.Abs.Exp where
+instance Print HindleyMilner.Parser.Abs.Exp where
   prt i = \case
-    HM.Parser.Abs.EVar id_ -> prPrec i 3 (concatD [prt 0 id_])
-    HM.Parser.Abs.ETrue -> prPrec i 3 (concatD [doc (showString "true")])
-    HM.Parser.Abs.EFalse -> prPrec i 3 (concatD [doc (showString "false")])
-    HM.Parser.Abs.ENat n -> prPrec i 3 (concatD [prt 0 n])
-    HM.Parser.Abs.EAdd exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, doc (showString "+"), prt 3 exp2])
-    HM.Parser.Abs.ESub exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, doc (showString "-"), prt 3 exp2])
-    HM.Parser.Abs.EIf exp1 exp2 exp3 -> prPrec i 1 (concatD [doc (showString "if"), prt 1 exp1, doc (showString "then"), prt 1 exp2, doc (showString "else"), prt 1 exp3])
-    HM.Parser.Abs.EIsZero exp -> prPrec i 2 (concatD [doc (showString "iszero"), doc (showString "("), prt 0 exp, doc (showString ")")])
-    HM.Parser.Abs.ETyped exp type_ -> prPrec i 0 (concatD [prt 1 exp, doc (showString ":"), prt 0 type_])
-    HM.Parser.Abs.ELet pattern_ exp scopedexp -> prPrec i 1 (concatD [doc (showString "let"), prt 0 pattern_, doc (showString "="), prt 1 exp, doc (showString "in"), prt 0 scopedexp])
-    HM.Parser.Abs.EAbs pattern_ scopedexp -> prPrec i 1 (concatD [doc (showString "\955"), prt 0 pattern_, doc (showString "."), prt 0 scopedexp])
-    HM.Parser.Abs.EApp exp1 exp2 -> prPrec i 1 (concatD [prt 1 exp1, prt 2 exp2])
-    HM.Parser.Abs.EFor pattern_ exp1 exp2 scopedexp -> prPrec i 1 (concatD [doc (showString "for"), prt 0 pattern_, doc (showString "in"), doc (showString "["), prt 1 exp1, doc (showString ".."), prt 1 exp2, doc (showString "]"), doc (showString "do"), prt 0 scopedexp])
+    HindleyMilner.Parser.Abs.EVar id_ -> prPrec i 3 (concatD [prt 0 id_])
+    HindleyMilner.Parser.Abs.ETrue -> prPrec i 3 (concatD [doc (showString "true")])
+    HindleyMilner.Parser.Abs.EFalse -> prPrec i 3 (concatD [doc (showString "false")])
+    HindleyMilner.Parser.Abs.ENat n -> prPrec i 3 (concatD [prt 0 n])
+    HindleyMilner.Parser.Abs.EAdd exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, doc (showString "+"), prt 3 exp2])
+    HindleyMilner.Parser.Abs.ESub exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, doc (showString "-"), prt 3 exp2])
+    HindleyMilner.Parser.Abs.EIf exp1 exp2 exp3 -> prPrec i 1 (concatD [doc (showString "if"), prt 1 exp1, doc (showString "then"), prt 1 exp2, doc (showString "else"), prt 1 exp3])
+    HindleyMilner.Parser.Abs.EIsZero exp -> prPrec i 2 (concatD [doc (showString "iszero"), doc (showString "("), prt 0 exp, doc (showString ")")])
+    HindleyMilner.Parser.Abs.ETyped exp type_ -> prPrec i 0 (concatD [prt 1 exp, doc (showString ":"), prt 0 type_])
+    HindleyMilner.Parser.Abs.ELet pattern_ exp scopedexp -> prPrec i 1 (concatD [doc (showString "let"), prt 0 pattern_, doc (showString "="), prt 1 exp, doc (showString "in"), prt 0 scopedexp])
+    HindleyMilner.Parser.Abs.EAbs pattern_ scopedexp -> prPrec i 1 (concatD [doc (showString "\955"), prt 0 pattern_, doc (showString "."), prt 0 scopedexp])
+    HindleyMilner.Parser.Abs.EApp exp1 exp2 -> prPrec i 1 (concatD [prt 1 exp1, prt 2 exp2])
+    HindleyMilner.Parser.Abs.EFor pattern_ exp1 exp2 scopedexp -> prPrec i 1 (concatD [doc (showString "for"), prt 0 pattern_, doc (showString "in"), doc (showString "["), prt 1 exp1, doc (showString ".."), prt 1 exp2, doc (showString "]"), doc (showString "do"), prt 0 scopedexp])
 
-instance Print HM.Parser.Abs.ScopedExp where
+instance Print HindleyMilner.Parser.Abs.ScopedExp where
   prt i = \case
-    HM.Parser.Abs.ScopedExp exp -> prPrec i 0 (concatD [prt 1 exp])
+    HindleyMilner.Parser.Abs.ScopedExp exp -> prPrec i 0 (concatD [prt 1 exp])
 
-instance Print HM.Parser.Abs.Type where
+instance Print HindleyMilner.Parser.Abs.Type where
   prt i = \case
-    HM.Parser.Abs.TUVar uvarident -> prPrec i 2 (concatD [prt 0 uvarident])
-    HM.Parser.Abs.TNat -> prPrec i 2 (concatD [doc (showString "Nat")])
-    HM.Parser.Abs.TBool -> prPrec i 2 (concatD [doc (showString "Bool")])
-    HM.Parser.Abs.TArrow type_1 type_2 -> prPrec i 1 (concatD [prt 2 type_1, doc (showString "->"), prt 1 type_2])
-    HM.Parser.Abs.TVar id_ -> prPrec i 2 (concatD [prt 0 id_])
-    HM.Parser.Abs.TForAll typepattern scopedtype -> prPrec i 0 (concatD [doc (showString "forall"), prt 0 typepattern, doc (showString "."), prt 0 scopedtype])
+    HindleyMilner.Parser.Abs.TUVar uvarident -> prPrec i 2 (concatD [prt 0 uvarident])
+    HindleyMilner.Parser.Abs.TNat -> prPrec i 2 (concatD [doc (showString "Nat")])
+    HindleyMilner.Parser.Abs.TBool -> prPrec i 2 (concatD [doc (showString "Bool")])
+    HindleyMilner.Parser.Abs.TArrow type_1 type_2 -> prPrec i 1 (concatD [prt 2 type_1, doc (showString "->"), prt 1 type_2])
+    HindleyMilner.Parser.Abs.TVar id_ -> prPrec i 2 (concatD [prt 0 id_])
+    HindleyMilner.Parser.Abs.TForAll typepattern scopedtype -> prPrec i 0 (concatD [doc (showString "forall"), prt 0 typepattern, doc (showString "."), prt 0 scopedtype])
 
-instance Print HM.Parser.Abs.ScopedType where
+instance Print HindleyMilner.Parser.Abs.ScopedType where
   prt i = \case
-    HM.Parser.Abs.ScopedType type_ -> prPrec i 0 (concatD [prt 1 type_])
+    HindleyMilner.Parser.Abs.ScopedType type_ -> prPrec i 0 (concatD [prt 1 type_])
 
-instance Print HM.Parser.Abs.TypePattern where
+instance Print HindleyMilner.Parser.Abs.TypePattern where
   prt i = \case
-    HM.Parser.Abs.TPatternVar id_ -> prPrec i 0 (concatD [prt 0 id_])
+    HindleyMilner.Parser.Abs.TPatternVar id_ -> prPrec i 0 (concatD [prt 0 id_])

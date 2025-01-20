@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 
-module HM.Eval where
+module HindleyMilner.Eval where
 
 import Control.Monad (forM)
 import Control.Monad.Foil
@@ -10,7 +10,7 @@ import Control.Monad.Foil
     identitySubst,
   )
 import Control.Monad.Free.Foil (AST (Var), substitute)
-import HM.Syntax
+import HindleyMilner.Syntax
 
 -- $setup
 -- >>> :set -XOverloadedStrings

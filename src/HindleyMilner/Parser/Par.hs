@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns -fno-warn-overlapping-patterns #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module HM.Parser.Par
+module HindleyMilner.Parser.Par
   ( happyError
   , myLexer
   , pPattern
@@ -20,8 +20,8 @@ module HM.Parser.Par
 
 import Prelude
 
-import qualified HM.Parser.Abs
-import HM.Parser.Lex
+import qualified HindleyMilner.Parser.Abs
+import HindleyMilner.Parser.Lex
 import qualified Data.Array as Happy_Data_Array
 import qualified Data.Bits as Bits
 import Control.Applicative(Applicative(..))
@@ -32,15 +32,15 @@ import Control.Monad (ap)
 data HappyAbsSyn 
 	= HappyTerminal (Token)
 	| HappyErrorToken Prelude.Int
-	| HappyAbsSyn14 (HM.Parser.Abs.Ident)
+	| HappyAbsSyn14 (HindleyMilner.Parser.Abs.Ident)
 	| HappyAbsSyn15 (Integer)
-	| HappyAbsSyn16 (HM.Parser.Abs.UVarIdent)
-	| HappyAbsSyn17 (HM.Parser.Abs.Pattern)
-	| HappyAbsSyn18 (HM.Parser.Abs.Exp)
-	| HappyAbsSyn22 (HM.Parser.Abs.ScopedExp)
-	| HappyAbsSyn23 (HM.Parser.Abs.Type)
-	| HappyAbsSyn26 (HM.Parser.Abs.ScopedType)
-	| HappyAbsSyn27 (HM.Parser.Abs.TypePattern)
+	| HappyAbsSyn16 (HindleyMilner.Parser.Abs.UVarIdent)
+	| HappyAbsSyn17 (HindleyMilner.Parser.Abs.Pattern)
+	| HappyAbsSyn18 (HindleyMilner.Parser.Abs.Exp)
+	| HappyAbsSyn22 (HindleyMilner.Parser.Abs.ScopedExp)
+	| HappyAbsSyn23 (HindleyMilner.Parser.Abs.Type)
+	| HappyAbsSyn26 (HindleyMilner.Parser.Abs.ScopedType)
+	| HappyAbsSyn27 (HindleyMilner.Parser.Abs.TypePattern)
 
 {- to allow type-synonyms as our monads (likely
  - with explicitly-specified bind and return)
@@ -873,7 +873,7 @@ action_91 _ = happyReduce_28
 happyReduce_11 = happySpecReduce_1  14 happyReduction_11
 happyReduction_11 (HappyTerminal (PT _ (TV happy_var_1)))
 	 =  HappyAbsSyn14
-		 (HM.Parser.Abs.Ident happy_var_1
+		 (HindleyMilner.Parser.Abs.Ident happy_var_1
 	)
 happyReduction_11 _  = notHappyAtAll 
 
@@ -887,40 +887,40 @@ happyReduction_12 _  = notHappyAtAll
 happyReduce_13 = happySpecReduce_1  16 happyReduction_13
 happyReduction_13 (HappyTerminal (PT _ (T_UVarIdent happy_var_1)))
 	 =  HappyAbsSyn16
-		 (HM.Parser.Abs.UVarIdent happy_var_1
+		 (HindleyMilner.Parser.Abs.UVarIdent happy_var_1
 	)
 happyReduction_13 _  = notHappyAtAll 
 
 happyReduce_14 = happySpecReduce_1  17 happyReduction_14
 happyReduction_14 (HappyAbsSyn14  happy_var_1)
 	 =  HappyAbsSyn17
-		 (HM.Parser.Abs.PatternVar happy_var_1
+		 (HindleyMilner.Parser.Abs.PatternVar happy_var_1
 	)
 happyReduction_14 _  = notHappyAtAll 
 
 happyReduce_15 = happySpecReduce_1  18 happyReduction_15
 happyReduction_15 (HappyAbsSyn14  happy_var_1)
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.EVar happy_var_1
+		 (HindleyMilner.Parser.Abs.EVar happy_var_1
 	)
 happyReduction_15 _  = notHappyAtAll 
 
 happyReduce_16 = happySpecReduce_1  18 happyReduction_16
 happyReduction_16 _
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.ETrue
+		 (HindleyMilner.Parser.Abs.ETrue
 	)
 
 happyReduce_17 = happySpecReduce_1  18 happyReduction_17
 happyReduction_17 _
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.EFalse
+		 (HindleyMilner.Parser.Abs.EFalse
 	)
 
 happyReduce_18 = happySpecReduce_1  18 happyReduction_18
 happyReduction_18 (HappyAbsSyn15  happy_var_1)
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.ENat happy_var_1
+		 (HindleyMilner.Parser.Abs.ENat happy_var_1
 	)
 happyReduction_18 _  = notHappyAtAll 
 
@@ -938,7 +938,7 @@ happyReduction_20 (HappyAbsSyn18  happy_var_3)
 	_
 	(HappyAbsSyn18  happy_var_1)
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.EAdd happy_var_1 happy_var_3
+		 (HindleyMilner.Parser.Abs.EAdd happy_var_1 happy_var_3
 	)
 happyReduction_20 _ _ _  = notHappyAtAll 
 
@@ -947,7 +947,7 @@ happyReduction_21 (HappyAbsSyn18  happy_var_3)
 	_
 	(HappyAbsSyn18  happy_var_1)
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.ESub happy_var_1 happy_var_3
+		 (HindleyMilner.Parser.Abs.ESub happy_var_1 happy_var_3
 	)
 happyReduction_21 _ _ _  = notHappyAtAll 
 
@@ -958,7 +958,7 @@ happyReduction_22 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn18
-		 (HM.Parser.Abs.EIsZero happy_var_3
+		 (HindleyMilner.Parser.Abs.EIsZero happy_var_3
 	) `HappyStk` happyRest
 
 happyReduce_23 = happySpecReduce_1  19 happyReduction_23
@@ -977,7 +977,7 @@ happyReduction_24 ((HappyAbsSyn18  happy_var_6) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn18
-		 (HM.Parser.Abs.EIf happy_var_2 happy_var_4 happy_var_6
+		 (HindleyMilner.Parser.Abs.EIf happy_var_2 happy_var_4 happy_var_6
 	) `HappyStk` happyRest
 
 happyReduce_25 = happyReduce 6 20 happyReduction_25
@@ -989,7 +989,7 @@ happyReduction_25 ((HappyAbsSyn22  happy_var_6) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn18
-		 (HM.Parser.Abs.ELet happy_var_2 happy_var_4 happy_var_6
+		 (HindleyMilner.Parser.Abs.ELet happy_var_2 happy_var_4 happy_var_6
 	) `HappyStk` happyRest
 
 happyReduce_26 = happyReduce 4 20 happyReduction_26
@@ -999,14 +999,14 @@ happyReduction_26 ((HappyAbsSyn22  happy_var_4) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn18
-		 (HM.Parser.Abs.EAbs happy_var_2 happy_var_4
+		 (HindleyMilner.Parser.Abs.EAbs happy_var_2 happy_var_4
 	) `HappyStk` happyRest
 
 happyReduce_27 = happySpecReduce_2  20 happyReduction_27
 happyReduction_27 (HappyAbsSyn18  happy_var_2)
 	(HappyAbsSyn18  happy_var_1)
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.EApp happy_var_1 happy_var_2
+		 (HindleyMilner.Parser.Abs.EApp happy_var_1 happy_var_2
 	)
 happyReduction_27 _ _  = notHappyAtAll 
 
@@ -1023,7 +1023,7 @@ happyReduction_28 ((HappyAbsSyn22  happy_var_10) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn18
-		 (HM.Parser.Abs.EFor happy_var_2 happy_var_5 happy_var_7 happy_var_10
+		 (HindleyMilner.Parser.Abs.EFor happy_var_2 happy_var_5 happy_var_7 happy_var_10
 	) `HappyStk` happyRest
 
 happyReduce_29 = happySpecReduce_1  20 happyReduction_29
@@ -1038,7 +1038,7 @@ happyReduction_30 (HappyAbsSyn23  happy_var_3)
 	_
 	(HappyAbsSyn18  happy_var_1)
 	 =  HappyAbsSyn18
-		 (HM.Parser.Abs.ETyped happy_var_1 happy_var_3
+		 (HindleyMilner.Parser.Abs.ETyped happy_var_1 happy_var_3
 	)
 happyReduction_30 _ _ _  = notHappyAtAll 
 
@@ -1052,33 +1052,33 @@ happyReduction_31 _  = notHappyAtAll
 happyReduce_32 = happySpecReduce_1  22 happyReduction_32
 happyReduction_32 (HappyAbsSyn18  happy_var_1)
 	 =  HappyAbsSyn22
-		 (HM.Parser.Abs.ScopedExp happy_var_1
+		 (HindleyMilner.Parser.Abs.ScopedExp happy_var_1
 	)
 happyReduction_32 _  = notHappyAtAll 
 
 happyReduce_33 = happySpecReduce_1  23 happyReduction_33
 happyReduction_33 (HappyAbsSyn16  happy_var_1)
 	 =  HappyAbsSyn23
-		 (HM.Parser.Abs.TUVar happy_var_1
+		 (HindleyMilner.Parser.Abs.TUVar happy_var_1
 	)
 happyReduction_33 _  = notHappyAtAll 
 
 happyReduce_34 = happySpecReduce_1  23 happyReduction_34
 happyReduction_34 _
 	 =  HappyAbsSyn23
-		 (HM.Parser.Abs.TNat
+		 (HindleyMilner.Parser.Abs.TNat
 	)
 
 happyReduce_35 = happySpecReduce_1  23 happyReduction_35
 happyReduction_35 _
 	 =  HappyAbsSyn23
-		 (HM.Parser.Abs.TBool
+		 (HindleyMilner.Parser.Abs.TBool
 	)
 
 happyReduce_36 = happySpecReduce_1  23 happyReduction_36
 happyReduction_36 (HappyAbsSyn14  happy_var_1)
 	 =  HappyAbsSyn23
-		 (HM.Parser.Abs.TVar happy_var_1
+		 (HindleyMilner.Parser.Abs.TVar happy_var_1
 	)
 happyReduction_36 _  = notHappyAtAll 
 
@@ -1096,7 +1096,7 @@ happyReduction_38 (HappyAbsSyn23  happy_var_3)
 	_
 	(HappyAbsSyn23  happy_var_1)
 	 =  HappyAbsSyn23
-		 (HM.Parser.Abs.TArrow happy_var_1 happy_var_3
+		 (HindleyMilner.Parser.Abs.TArrow happy_var_1 happy_var_3
 	)
 happyReduction_38 _ _ _  = notHappyAtAll 
 
@@ -1114,7 +1114,7 @@ happyReduction_40 ((HappyAbsSyn26  happy_var_4) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn23
-		 (HM.Parser.Abs.TForAll happy_var_2 happy_var_4
+		 (HindleyMilner.Parser.Abs.TForAll happy_var_2 happy_var_4
 	) `HappyStk` happyRest
 
 happyReduce_41 = happySpecReduce_1  25 happyReduction_41
@@ -1127,14 +1127,14 @@ happyReduction_41 _  = notHappyAtAll
 happyReduce_42 = happySpecReduce_1  26 happyReduction_42
 happyReduction_42 (HappyAbsSyn23  happy_var_1)
 	 =  HappyAbsSyn26
-		 (HM.Parser.Abs.ScopedType happy_var_1
+		 (HindleyMilner.Parser.Abs.ScopedType happy_var_1
 	)
 happyReduction_42 _  = notHappyAtAll 
 
 happyReduce_43 = happySpecReduce_1  27 happyReduction_43
 happyReduction_43 (HappyAbsSyn14  happy_var_1)
 	 =  HappyAbsSyn27
-		 (HM.Parser.Abs.TPatternVar happy_var_1
+		 (HindleyMilner.Parser.Abs.TPatternVar happy_var_1
 	)
 happyReduction_43 _  = notHappyAtAll 
 

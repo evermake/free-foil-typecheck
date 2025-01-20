@@ -5,7 +5,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
-module HM.Typecheck where
+module HindleyMilner.Typecheck where
 
 -- import Control.Applicative (Const)
 import Control.Monad (ap)
@@ -16,8 +16,8 @@ import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifunctor
 import qualified Data.Foldable as F
 import qualified Data.IntMap as IntMap
-import qualified HM.Parser.Abs as Raw
-import HM.Syntax
+import qualified HindleyMilner.Parser.Abs as Raw
+import HindleyMilner.Syntax
 
 -- $setup
 -- >>> :set -XOverloadedStrings

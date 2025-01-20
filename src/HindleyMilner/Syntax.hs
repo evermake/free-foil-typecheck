@@ -6,7 +6,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module HM.Syntax where
+module HindleyMilner.Syntax where
 
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil
@@ -15,9 +15,9 @@ import Data.Bifunctor.TH
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.String (IsString (..))
-import qualified HM.Parser.Abs as Raw
-import qualified HM.Parser.Par as Raw
-import qualified HM.Parser.Print as Raw
+import qualified HindleyMilner.Parser.Abs as Raw
+import qualified HindleyMilner.Parser.Par as Raw
+import qualified HindleyMilner.Parser.Print as Raw
 
 -- $setup
 -- >>> :set -XOverloadedStrings

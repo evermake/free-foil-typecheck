@@ -6,7 +6,7 @@
 
 -- | The abstract syntax of language Parser.
 
-module HM.Parser.Abs where
+module HindleyMilner.Parser.Abs where
 
 import Prelude (Integer, String)
 import qualified Prelude as C (Eq, Ord, Show, Read)

@@ -1,12 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 
-module HM.Interpret where
+module HindleyMilner.Interpret where
 
 import Control.Monad.Foil (S (VoidS), emptyScope)
-import HM.Eval
-import HM.Parser.Par
-import HM.Syntax (Exp, Type', toExpClosed)
-import HM.Typecheck
+import HindleyMilner.Eval
+import HindleyMilner.Parser.Par
+import HindleyMilner.Syntax (Exp, Type', toExpClosed)
+import HindleyMilner.Typecheck
 
 data Result
   = Success (Exp VoidS, Type') -- Output of evaluation.

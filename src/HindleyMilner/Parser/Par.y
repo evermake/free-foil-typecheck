@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns -fno-warn-overlapping-patterns #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module HM.Parser.Par
+module HindleyMilner.Parser.Par
   ( happyError
   , myLexer
   , pPattern
@@ -23,8 +23,8 @@ module HM.Parser.Par
 
 import Prelude
 
-import qualified HM.Parser.Abs
-import HM.Parser.Lex
+import qualified HindleyMilner.Parser.Abs
+import HindleyMilner.Parser.Lex
 
 }
 
@@ -74,70 +74,73 @@ import HM.Parser.Lex
 
 %%
 
-Ident :: { HM.Parser.Abs.Ident }
-Ident  : L_Ident { HM.Parser.Abs.Ident $1 }
+Ident :: { HindleyMilner.Parser.Abs.Ident }
+Ident  : L_Ident { HindleyMilner.Parser.Abs.Ident $1 }
 
 Integer :: { Integer }
 Integer  : L_integ  { (read $1) :: Integer }
 
-UVarIdent :: { HM.Parser.Abs.UVarIdent }
-UVarIdent  : L_UVarIdent { HM.Parser.Abs.UVarIdent $1 }
+UVarIdent :: { HindleyMilner.Parser.Abs.UVarIdent }
+UVarIdent  : L_UVarIdent { HindleyMilner.Parser.Abs.UVarIdent $1 }
 
-Pattern :: { HM.Parser.Abs.Pattern }
-Pattern : Ident { HM.Parser.Abs.PatternVar $1 }
+Pattern :: { HindleyMilner.Parser.Abs.Pattern }
+Pattern : Ident { HindleyMilner.Parser.Abs.PatternVar $1 }
 
-Exp3 :: { HM.Parser.Abs.Exp }
+Exp3 :: { HindleyMilner.Parser.Abs.Exp }
 Exp3
-  : Ident { HM.Parser.Abs.EVar $1 }
-  | 'true' { HM.Parser.Abs.ETrue }
-  | 'false' { HM.Parser.Abs.EFalse }
-  | Integer { HM.Parser.Abs.ENat $1 }
+  : Ident { HindleyMilner.Parser.Abs.EVar $1 }
+  | 'true' { HindleyMilner.Parser.Abs.ETrue }
+  | 'false' { HindleyMilner.Parser.Abs.EFalse }
+  | Integer { HindleyMilner.Parser.Abs.ENat $1 }
   | '(' Exp ')' { $2 }
 
-Exp2 :: { HM.Parser.Abs.Exp }
+Exp2 :: { HindleyMilner.Parser.Abs.Exp }
 Exp2
-  : Exp2 '+' Exp3 { HM.Parser.Abs.EAdd $1 $3 }
-  | Exp2 '-' Exp3 { HM.Parser.Abs.ESub $1 $3 }
-  | 'iszero' '(' Exp ')' { HM.Parser.Abs.EIsZero $3 }
+  : Exp2 '+' Exp3 { HindleyMilner.Parser.Abs.EAdd $1 $3 }
+  | Exp2 '-' Exp3 { HindleyMilner.Parser.Abs.ESub $1 $3 }
+  | 'iszero' '(' Exp ')' { HindleyMilner.Parser.Abs.EIsZero $3 }
   | Exp3 { $1 }
 
-Exp1 :: { HM.Parser.Abs.Exp }
+Exp1 :: { HindleyMilner.Parser.Abs.Exp }
 Exp1
-  : 'if' Exp1 'then' Exp1 'else' Exp1 { HM.Parser.Abs.EIf $2 $4 $6 }
-  | 'let' Pattern '=' Exp1 'in' ScopedExp { HM.Parser.Abs.ELet $2 $4 $6 }
-  | 'λ' Pattern '.' ScopedExp { HM.Parser.Abs.EAbs $2 $4 }
-  | Exp1 Exp2 { HM.Parser.Abs.EApp $1 $2 }
-  | 'for' Pattern 'in' '[' Exp1 '..' Exp1 ']' 'do' ScopedExp { HM.Parser.Abs.EFor $2 $5 $7 $10 }
+  : 'if' Exp1 'then' Exp1 'else' Exp1 { HindleyMilner.Parser.Abs.EIf $2 $4 $6 }
+  | 'let' Pattern '=' Exp1 'in' ScopedExp { HindleyMilner.Parser.Abs.ELet $2 $4 $6 }
+  | 'λ' Pattern '.' ScopedExp { HindleyMilner.Parser.Abs.EAbs $2 $4 }
+  | Exp1 Exp2 { HindleyMilner.Parser.Abs.EApp $1 $2 }
+  | 'for' Pattern 'in' '[' Exp1 '..' Exp1 ']' 'do' ScopedExp { HindleyMilner.Parser.Abs.EFor $2 $5 $7 $10 }
   | Exp2 { $1 }
 
-Exp :: { HM.Parser.Abs.Exp }
-Exp : Exp1 ':' Type { HM.Parser.Abs.ETyped $1 $3 } | Exp1 { $1 }
+Exp :: { HindleyMilner.Parser.Abs.Exp }
+Exp
+  : Exp1 ':' Type { HindleyMilner.Parser.Abs.ETyped $1 $3 }
+  | Exp1 { $1 }
 
-ScopedExp :: { HM.Parser.Abs.ScopedExp }
-ScopedExp : Exp1 { HM.Parser.Abs.ScopedExp $1 }
+ScopedExp :: { HindleyMilner.Parser.Abs.ScopedExp }
+ScopedExp : Exp1 { HindleyMilner.Parser.Abs.ScopedExp $1 }
 
-Type2 :: { HM.Parser.Abs.Type }
+Type2 :: { HindleyMilner.Parser.Abs.Type }
 Type2
-  : UVarIdent { HM.Parser.Abs.TUVar $1 }
-  | 'Nat' { HM.Parser.Abs.TNat }
-  | 'Bool' { HM.Parser.Abs.TBool }
-  | Ident { HM.Parser.Abs.TVar $1 }
+  : UVarIdent { HindleyMilner.Parser.Abs.TUVar $1 }
+  | 'Nat' { HindleyMilner.Parser.Abs.TNat }
+  | 'Bool' { HindleyMilner.Parser.Abs.TBool }
+  | Ident { HindleyMilner.Parser.Abs.TVar $1 }
   | '(' Type ')' { $2 }
 
-Type1 :: { HM.Parser.Abs.Type }
+Type1 :: { HindleyMilner.Parser.Abs.Type }
 Type1
-  : Type2 '->' Type1 { HM.Parser.Abs.TArrow $1 $3 } | Type2 { $1 }
+  : Type2 '->' Type1 { HindleyMilner.Parser.Abs.TArrow $1 $3 }
+  | Type2 { $1 }
 
-Type :: { HM.Parser.Abs.Type }
+Type :: { HindleyMilner.Parser.Abs.Type }
 Type
-  : 'forall' TypePattern '.' ScopedType { HM.Parser.Abs.TForAll $2 $4 }
+  : 'forall' TypePattern '.' ScopedType { HindleyMilner.Parser.Abs.TForAll $2 $4 }
   | Type1 { $1 }
 
-ScopedType :: { HM.Parser.Abs.ScopedType }
-ScopedType : Type1 { HM.Parser.Abs.ScopedType $1 }
+ScopedType :: { HindleyMilner.Parser.Abs.ScopedType }
+ScopedType : Type1 { HindleyMilner.Parser.Abs.ScopedType $1 }
 
-TypePattern :: { HM.Parser.Abs.TypePattern }
-TypePattern : Ident { HM.Parser.Abs.TPatternVar $1 }
+TypePattern :: { HindleyMilner.Parser.Abs.TypePattern }
+TypePattern : Ident { HindleyMilner.Parser.Abs.TPatternVar $1 }
 
 {
 

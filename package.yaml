@@ -1,18 +1,18 @@
-name: free-foil-hm
+name: free-foil-typecheck
 version: 0.0.1
-github: "evermake/free-foil-hm"
+github: "evermake/free-foil-typecheck"
 
 extra-source-files:
   - README.md
   - grammar/hindley-milner.cf
 
-synopsis: Hindley-Milner type system implementation powered by Free Foil.
+synopsis: Type systems implementation powered by Free Foil.
 category: Language
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description: Please see the README on GitHub at <https://github.com/evermake/free-foil-hm#readme>
+description: Please see the README on GitHub at <https://github.com/evermake/free-foil-typecheck#readme>
 
 custom-setup:
   dependencies:
@@ -42,9 +42,9 @@ library:
   when:
     - condition: false
       other-modules:
-        - HM.Parser.Test
-        - HM.Parser.ErrM
-        - HM.Parser.Skel
+        - HindleyMilner.Parser.Test
+        - HindleyMilner.Parser.ErrM
+        - HindleyMilner.Parser.Skel
 
 executables:
   repl:
@@ -56,7 +56,7 @@ executables:
       - -rtsopts
       - -with-rtsopts=-N
     dependencies:
-      - free-foil-hm
+      - free-foil-typecheck
 
   interpreter:
     main: Interpreter.hs
@@ -67,7 +67,7 @@ executables:
       - -rtsopts
       - -with-rtsopts=-N
     dependencies:
-      - free-foil-hm
+      - free-foil-typecheck
 
 tests:
   doctests:
@@ -77,7 +77,7 @@ tests:
     main: Main.hs
     other-modules: []
     dependencies:
-      - free-foil-hm
+      - free-foil-typecheck
       - doctest-parallel
 
   spec:
@@ -88,7 +88,7 @@ tests:
       - -rtsopts
       - -with-rtsopts=-N
     dependencies:
-      - free-foil-hm
+      - free-foil-typecheck
       - hspec
       - hspec-discover
       - directory

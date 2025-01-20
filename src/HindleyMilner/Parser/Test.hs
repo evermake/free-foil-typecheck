@@ -18,11 +18,11 @@ import System.Environment ( getArgs )
 import System.Exit        ( exitFailure )
 import Control.Monad      ( when )
 
-import HM.Parser.Abs   ()
-import HM.Parser.Lex   ( Token, mkPosToken )
-import HM.Parser.Par   ( pPattern, myLexer )
-import HM.Parser.Print ( Print, printTree )
-import HM.Parser.Skel  ()
+import HindleyMilner.Parser.Abs   ()
+import HindleyMilner.Parser.Lex   ( Token, mkPosToken )
+import HindleyMilner.Parser.Par   ( pPattern, myLexer )
+import HindleyMilner.Parser.Print ( Print, printTree )
+import HindleyMilner.Parser.Skel  ()
 
 type Err        = Either String
 type ParseFun a = [Token] -> Err a

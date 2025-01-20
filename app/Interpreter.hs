@@ -1,6 +1,6 @@
 module Main where
 
-import HM.Interpret
+import HindleyMilner.Interpret
 import System.Exit
 
 main :: IO ()

@@ -20,7 +20,7 @@ jobs:
           stack-version: 'latest'
 
       - name: Build Haddock
-        run: stack haddock free-foil-hm
+        run: stack haddock free-foil-typecheck
 
       - name: Detect Haddock path
         run: echo "HADDOCK_DIR_PATH=$(stack path --local-doc-root)" >> $GITHUB_ENV
