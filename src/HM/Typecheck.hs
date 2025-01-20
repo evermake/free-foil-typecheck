@@ -7,7 +7,6 @@
 
 module HM.Typecheck where
 
--- import Control.Applicative (Const)
 import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil as FreeFoil
@@ -15,9 +14,14 @@ import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifunctor
 import qualified Data.Foldable as F
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Hashable (Hashable(..))
 import qualified Data.IntMap as IntMap
 import qualified HM.Parser.Abs as Raw
 import HM.Syntax
+
+instance Data.Hashable.Hashable Raw.UVarIdent where
+  hashWithSalt salt (Raw.UVarIdent s) = Data.Hashable.hashWithSalt salt s
 
 -- $setup
 -- >>> :set -XOverloadedStrings
@@ -32,7 +36,7 @@ import HM.Syntax
 -- Right Nat
 inferTypeNewClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeNewClosed expr = do
-  (type', TypingContext constrs substs _ _) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0)
+  (type', TypingContext constrs substs _ _ _ _) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0 0 HashMap.empty)
   substs' <- unify (map (applySubstsToConstraint substs) constrs)
   return (applySubstsToType substs' type')
 
@@ -139,7 +143,9 @@ data TypingContext n = TypingContext
   { tcConstraints :: [Constraint],
     tcSubsts :: [USubst'],
     tcTypings :: FreeFoil.NameMap n Type',
-    tcFreshId :: Int
+    tcFreshId :: Int,
+    tcLevel :: Int,
+    tcLevels :: HashMap.HashMap Raw.UVarIdent Int
   }
 
 get :: TypeCheck n (TypingContext n)
@@ -148,37 +154,50 @@ get = TypeCheck $ \tc -> Right (tc, tc)
 put :: TypingContext n -> TypeCheck n ()
 put new = TypeCheck $ \_old -> Right ((), new)
 
+addLevel :: Int -> TypeCheck n ()
+addLevel diff = do
+  TypingContext constraints substs ctx freshId curLevel levelsMap <- get
+  put (TypingContext constraints substs ctx freshId (curLevel + diff) levelsMap)
+
+incrLevel :: TypeCheck n ()
+incrLevel = addLevel 1
+
+decrLevel :: TypeCheck n ()
+decrLevel = addLevel (-1)
+
 eitherToTypeCheck :: Either String a -> TypeCheck n a
 eitherToTypeCheck (Left err) = TypeCheck $ \_tc -> Left err
 eitherToTypeCheck (Right x) = TypeCheck $ \tc -> Right (x, tc)
 
 unifyTypeCheck :: TypeCheck n ()
 unifyTypeCheck = do
-  TypingContext constraints substs ctx freshId <- get
+  TypingContext constraints substs ctx freshId curLevel levelsMap <- get
   substs' <- eitherToTypeCheck (unifyWith substs constraints)
-  put (TypingContext [] (substs +++ substs') ctx freshId)
+  put (TypingContext [] (substs +++ substs') ctx freshId curLevel levelsMap)
 
 enterScope :: Foil.NameBinder n l -> Type' -> TypeCheck l a -> TypeCheck n a
 enterScope binder type_ code = do
-  TypingContext constraints substs ctx freshId <- get
+  TypingContext constraints substs ctx freshId curLevel levelsMap <- get
   let ctx' = Foil.addNameBinder binder type_ ctx
-  (x, TypingContext constraints'' substs'' ctx'' freshId'') <-
+  (x, TypingContext constraints'' substs'' ctx'' freshId'' curLevel'' levelsMap'') <-
     eitherToTypeCheck $
-      runTypeCheck code (TypingContext constraints substs ctx' freshId)
+      runTypeCheck code (TypingContext constraints substs ctx' freshId curLevel levelsMap)
   let ctx''' = popNameBinder binder ctx''
-  put (TypingContext constraints'' substs'' ctx''' freshId'')
+  put (TypingContext constraints'' substs'' ctx''' freshId'' curLevel'' levelsMap'')
   return x
 
 addConstraints :: [Constraint] -> TypeCheck n ()
 addConstraints constrs = do
-  TypingContext constraints substs ctx freshId <- get
-  put (TypingContext (constrs ++ constraints) substs ctx freshId)
+  TypingContext constraints substs ctx freshId curLevel levelsMap <- get
+  put (TypingContext (constrs ++ constraints) substs ctx freshId curLevel levelsMap)
 
 freshTypeVar :: TypeCheck n Type'
 freshTypeVar = do
-  TypingContext constraints substs ctx freshId <- get
-  put (TypingContext constraints substs ctx (freshId + 1))
-  return (TUVar (makeIdent freshId))
+  TypingContext constraints substs ctx freshId curLevel levelsMap <- get
+  let newIdent = makeIdent freshId
+  let newLevelsMap = HashMap.insert newIdent curLevel levelsMap
+  put (TypingContext constraints substs ctx (freshId + 1) curLevel newLevelsMap)
+  return (TUVar newIdent)
 
 -- | Recursively "reconstructs" type of an expression.
 -- On success, returns the "reconstructed" type and collected constraints.
@@ -193,19 +212,22 @@ reconstructType ETrue = return TBool
 reconstructType EFalse = return TBool
 reconstructType (ENat _) = return TNat -- TypeCheck $ \tc -> Right (TNat, tc)
 reconstructType (FreeFoil.Var x) = do
-  TypingContext constrs subst ctx freshId <- get
+  TypingContext constrs subst ctx freshId curLevel levelsMap <- get
   let xTyp = Foil.lookupName x ctx
   let (specTyp, freshId2) = specialize xTyp freshId
-  put (TypingContext constrs subst ctx freshId2)
+  put (TypingContext constrs subst ctx freshId2 curLevel levelsMap)
   return specTyp
 reconstructType (ELet eWhat x eExpr) = do
+  incrLevel
   whatTyp <- reconstructType eWhat
+  decrLevel
   unifyTypeCheck
-  (TypingContext _ substs ctx _) <- get
+  (TypingContext _ substs _ _ currentLevel levelsMap) <- get
   let whatTyp1 = applySubstsToType substs whatTyp
-  let ctx' = fmap (applySubstsToType substs) ctx
-  let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
-  let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
+  let whatFreeIdents = filter (\i -> case HashMap.lookup i levelsMap of
+                                      Just level -> level > currentLevel
+                                      Nothing -> False) 
+                             (allUVarsOfType whatTyp1)
   let whatTyp2 = generalize whatFreeIdents whatTyp1
   enterScope x whatTyp2 (reconstructType eExpr)
 reconstructType (EAdd lhs rhs) = do
@@ -267,9 +289,9 @@ makeIdent :: Int -> Raw.UVarIdent
 makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 
 -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
--- forall x0 . forall x1 . x0 -> x1 -> x0
+-- forall x0 . (forall x1 . x0 -> x1 -> x0)
 -- >>> generalize ["?b", "?a"] "?a -> ?b -> ?a"
--- forall x0 . forall x1 . x1 -> x0 -> x1
+-- forall x0 . (forall x1 . x1 -> x0 -> x1)
 generalize :: [Raw.UVarIdent] -> Type' -> Type'
 generalize = go Foil.emptyScope
   where
@@ -293,7 +315,7 @@ generalize = go Foil.emptyScope
 -- addSubst identitySubst binder :: e VoidS -> Substitution e l0 VoidS
 -- addSubst identitySubst binder ... :: Substitution e l0 VoidS
 
--- >>> specialize "forall a. forall b. a -> b" 6
+-- >>> specialize "forall a. (forall b. a -> b)" 6
 -- (?u6 -> ?u7,8)
 specialize :: Type' -> Int -> (Type', Int)
 specialize (TForAll binder type_) freshId =

@@ -32,6 +32,8 @@ dependencies:
   bifunctors:
   containers:
   free-foil: ">= 0.0.3"
+  unordered-containers: ">= 0.2.20"
+  hashable: ">= 1.4.0"
 
 ghc-options:
   - -Wall

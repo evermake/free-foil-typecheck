@@ -53,6 +53,8 @@ library
     , bifunctors
     , containers
     , free-foil >=0.0.3
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 executable interpreter
@@ -72,6 +74,8 @@ executable interpreter
     , containers
     , free-foil >=0.0.3
     , free-foil-hm
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 executable repl
@@ -91,6 +95,8 @@ executable repl
     , containers
     , free-foil >=0.0.3
     , free-foil-hm
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 test-suite doctests
@@ -113,6 +119,8 @@ test-suite doctests
     , doctest-parallel
     , free-foil >=0.0.3
     , free-foil-hm
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 test-suite spec
@@ -138,6 +146,8 @@ test-suite spec
     , filepath
     , free-foil >=0.0.3
     , free-foil-hm
+    , hashable >=1.4.0
     , hspec
     , hspec-discover
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
