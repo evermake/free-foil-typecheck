@@ -1,0 +1,12 @@
+let x0 = λz.z in
+  let x1 = λz.z x0 x0 in
+    let x2 = λz.z x1 x1 in
+      let x3 = λz.z x2 x2 in
+        let x4 = λz.z x3 x3 in
+          let x5 = λz.z x4 x4 in
+            let x6 = λz.z x5 x5 in
+              let x7 = λz.z x6 x6 in
+                let x8 = λz.z x7 x7 in
+                  let x9 = λz.z x8 x8 in
+                    let x10 = λz.z x9 x9 in
+                      x10
