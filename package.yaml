@@ -1,18 +1,14 @@
 name: free-foil-typecheck
 version: 0.0.1
 github: "evermake/free-foil-typecheck"
+description: Please see the README on GitHub at <https://github.com/evermake/free-foil-typecheck#readme>
+synopsis: Type systems implementation powered by Free Foil.
+category: Language
 
 extra-source-files:
   - README.md
   - grammar/hindley-milner.cf
-
-synopsis: Type systems implementation powered by Free Foil.
-category: Language
-
-# To avoid duplicated efforts in documentation and dealing with the
-# complications of embedding Haddock markup inside cabal files, it is
-# common to point users to the README.md file.
-description: Please see the README on GitHub at <https://github.com/evermake/free-foil-typecheck#readme>
+  - grammar/system-f.cf
 
 custom-setup:
   dependencies:
@@ -31,7 +27,7 @@ dependencies:
   array: ">= 0.5.3.0"
   bifunctors:
   containers:
-  free-foil: ">= 0.0.3"
+  free-foil: ">= 0.2.0"
 
 ghc-options:
   - -Wall
@@ -42,14 +38,20 @@ library:
   when:
     - condition: false
       other-modules:
-        - HindleyMilner.Parser.Test
-        - HindleyMilner.Parser.ErrM
-        - HindleyMilner.Parser.Skel
+        - FreeFoilTypecheck.HindleyMilner.Parser.Test
+        - FreeFoilTypecheck.HindleyMilner.Parser.ErrM
+        - FreeFoilTypecheck.HindleyMilner.Parser.Skel
+
+    - condition: false
+      other-modules:
+        - FreeFoilTypecheck.SystemF.Parser.Test
+        - FreeFoilTypecheck.SystemF.Parser.ErrM
+        - FreeFoilTypecheck.SystemF.Parser.Skel
 
 executables:
-  repl:
+  repl-hm:
     main: Repl.hs
-    source-dirs: app
+    source-dirs: app/HindleyMilner
     other-modules: []
     ghc-options:
       - -threaded
@@ -58,14 +60,28 @@ executables:
     dependencies:
       - free-foil-typecheck
 
-  interpreter:
+  interpreter-hm:
     main: Interpreter.hs
-    source-dirs: app
+    source-dirs: app/HindleyMilner
     other-modules: []
     ghc-options:
       - -threaded
       - -rtsopts
       - -with-rtsopts=-N
+    dependencies:
+      - free-foil-typecheck
+
+  repl-sf:
+    main: Repl.hs
+    source-dirs: app/SystemF
+    other-modules: []
+    dependencies:
+      - free-foil-typecheck
+
+  interpreter-sf:
+    main: Interpreter.hs
+    source-dirs: app/SystemF
+    other-modules: []
     dependencies:
       - free-foil-typecheck
 

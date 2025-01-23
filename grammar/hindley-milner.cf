@@ -1,4 +1,4 @@
-token UVarIdent ('?' letter (letter | digit | '_')*) ; ;
+-- Expressions grammar.
 
 PatternVar. Pattern ::= Ident ;
 
@@ -16,25 +16,22 @@ EAbs.    Exp1 ::= "λ" Pattern "." ScopedExp ;
 EApp.    Exp1 ::= Exp1 Exp2 ;
 EFor.    Exp1 ::= "for" Pattern "in" "[" Exp1 ".." Exp1 "]" "do" ScopedExp ;
 
-ScopedExp. ScopedExp ::= Exp1 ;
-
--- https://bnfc.readthedocs.io/en/latest/lbnf.html#coercions
 coercions Exp 3 ;
 
--- a -> b -> c
--- (a -> b) -> c
--- a -> (b -> c)
+ScopedExp. ScopedExp ::= Exp1 ;
+
+-- Types grammar.
+
+token UVarIdent ('?' letter (letter | digit | '_')*) ;
+TPatternVar. TypePattern ::= Ident ;
+
 TUVar.   Type2 ::= UVarIdent ;
 TNat.    Type2 ::= "Nat" ;
 TBool.   Type2 ::= "Bool" ;
 TArrow.  Type1 ::= Type2 "->" Type1 ;
 TVar.    Type2 ::= Ident ;
 TForAll. Type ::= "forall" TypePattern "." ScopedType ;
--- _. Type ::= Type1 ;
--- _. Type1 ::= Type2 ;
--- _. Type2 ::= "(" Type ")" ;
+
 coercions Type 2 ;
 
 ScopedType. ScopedType ::= Type1 ;
-
-TPatternVar. TypePattern ::= Ident ;

@@ -1,0 +1,1 @@
+let x = true in (if iszero(x) then 1 else 0)

@@ -1,0 +1,2 @@
+for x in [0..1] do
+    1+x : Bool

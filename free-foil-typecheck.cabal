@@ -15,6 +15,7 @@ build-type:     Custom
 extra-source-files:
     README.md
     grammar/hindley-milner.cf
+    grammar/system-f.cf
 
 source-repository head
   type: git
@@ -29,14 +30,24 @@ custom-setup
 
 library
   exposed-modules:
-      HindleyMilner.Eval
-      HindleyMilner.Interpret
-      HindleyMilner.Parser.Abs
-      HindleyMilner.Parser.Lex
-      HindleyMilner.Parser.Par
-      HindleyMilner.Parser.Print
-      HindleyMilner.Syntax
-      HindleyMilner.Typecheck
+      FreeFoilTypecheck.HindleyMilner.Eval
+      FreeFoilTypecheck.HindleyMilner.Interpret
+      FreeFoilTypecheck.HindleyMilner.Parser.Abs
+      FreeFoilTypecheck.HindleyMilner.Parser.Lex
+      FreeFoilTypecheck.HindleyMilner.Parser.Par
+      FreeFoilTypecheck.HindleyMilner.Parser.Print
+      FreeFoilTypecheck.HindleyMilner.Syntax
+      FreeFoilTypecheck.HindleyMilner.Typecheck
+      FreeFoilTypecheck.SystemF.Eval
+      FreeFoilTypecheck.SystemF.Interpret
+      FreeFoilTypecheck.SystemF.Parser.Abs
+      FreeFoilTypecheck.SystemF.Parser.Lex
+      FreeFoilTypecheck.SystemF.Parser.Par
+      FreeFoilTypecheck.SystemF.Parser.Print
+      FreeFoilTypecheck.SystemF.Syntax
+      FreeFoilTypecheck.SystemF.Syntax.Pattern
+      FreeFoilTypecheck.SystemF.Syntax.Term
+      FreeFoilTypecheck.SystemF.Typecheck
   other-modules:
       Paths_free_foil_typecheck
   hs-source-dirs:
@@ -52,13 +63,13 @@ library
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.0.3
+    , free-foil >=0.2.0
   default-language: Haskell2010
 
-executable interpreter
+executable interpreter-hm
   main-is: Interpreter.hs
   hs-source-dirs:
-      app
+      app/HindleyMilner
   ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex >=3.2.4
@@ -70,14 +81,33 @@ executable interpreter
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.0.3
+    , free-foil >=0.2.0
     , free-foil-typecheck
   default-language: Haskell2010
 
-executable repl
+executable interpreter-sf
+  main-is: Interpreter.hs
+  hs-source-dirs:
+      app/SystemF
+  ghc-options: -Wall -Werror
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+  default-language: Haskell2010
+
+executable repl-hm
   main-is: Repl.hs
   hs-source-dirs:
-      app
+      app/HindleyMilner
   ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex >=3.2.4
@@ -89,7 +119,26 @@ executable repl
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.0.3
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+  default-language: Haskell2010
+
+executable repl-sf
+  main-is: Repl.hs
+  hs-source-dirs:
+      app/SystemF
+  ghc-options: -Wall -Werror
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , free-foil >=0.2.0
     , free-foil-typecheck
   default-language: Haskell2010
 
@@ -111,7 +160,7 @@ test-suite doctests
     , bifunctors
     , containers
     , doctest-parallel
-    , free-foil >=0.0.3
+    , free-foil >=0.2.0
     , free-foil-typecheck
   default-language: Haskell2010
 
@@ -119,7 +168,8 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      HM.TypecheckSpec
+      FreeFoilTypecheck.HindleyMilner.TypecheckSpec
+      FreeFoilTypecheck.SystemF.InterpretSpec
       Paths_free_foil_typecheck
   hs-source-dirs:
       test
@@ -136,7 +186,7 @@ test-suite spec
     , containers
     , directory
     , filepath
-    , free-foil >=0.0.3
+    , free-foil >=0.2.0
     , free-foil-typecheck
     , hspec
     , hspec-discover
