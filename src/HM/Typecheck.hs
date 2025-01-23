@@ -142,6 +142,8 @@ instance TypingSig (FreeFoil.AST TypeSig) TypeSig where
     EAbsSig argType (Scoped binder bodyType) -> do
       bodyType' <- unsinkType' binder ctx bodyType
       return (TArrow argType bodyType')
+    ELetSig (Scoped binder binderType) bodyType -> do
+      return bodyType
     where
       -- isExpectedToBe :: AlphaEquiv ty => Foil.Scope n -> ty n -> ty n -> Either (TypeError (ty n)) ()
       actual `isExpectedToBe` expected =
