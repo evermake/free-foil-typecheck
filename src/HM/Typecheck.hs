@@ -88,13 +88,56 @@ instance
   where
   alphaEquiv = Foil.alphaEquiv
 
+-- class (AlphaEquiv ty) => TypingSig binder ty sig where
+
+-- ∀ x₁ x₂ … xₙ. T
+-- Type scheme (a.k.a. polytype).
+data TypeScheme ty where
+  TypeScheme :: Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
+
+data HMType ty = MonoType (ty Foil.VoidS) | PolyType TypeScheme
+
+class HMTypingSig (ty :: Foil.S -> *) (sig :: * -> * -> *) where
+  inferSigHM ::
+    sig (HMType ty, ty Foil.VoidS) (ty Foil.VoidS) -> -- expr node
+    TypeCheck n ty (ty Foil.VoidS) -- typecheck result
+
+instance HMTypingSig (FreeFoil.AST TypeSig) ExpSig where
+  inferSigHM = \case
+    ETrueSig -> return TBool
+    EAddSig l r -> do
+      unifyHM l TNat
+      unifyHM r TNat
+      return TNat
+    EAppSig funType argType -> do
+      retType <- freshHM
+      unifyHM funType (TArrow argType retType)
+      return retType
+    ELetSig eType (xType, bodyType) -> do
+      generalizeHM eType xType
+      return bodyType
+
+-- unifyHM :: ty n -> ty n -> TypeCheck n ty ()
+-- freshHM :: TypeCheck n ty (ty n)
+-- generalizeHM :: ty n -> HMType ty -> TypeCheck n ty ()
+
+inferHM :: HMTypingSig ty sig => AST binder sig n -> TypeCheck n ty (ty Foil.VoidS)
+inferHM = \case
+  Var x -> _ -- specialize...
+  Node node -> inferSigHM (bitraverse inferScopedHM inferHM node)
+
+inferScopedHM :: HMTypingSig ty sig => ScopedAST binder sig n -> TypeCheck n ty (HMType ty, ty Foil.VoidS)
+inferScopedHM (ScopedAST binder body) =
+  enterScopeHM binder $
+    inferHM body
+
 class (AlphaEquiv ty) => TypingSig binder ty sig where
   checkSig ::
     (Foil.Distinct n) =>
     Context' ty n -> -- context
     sig (Scoped binder ty n) (ty n) -> -- expr node
-    ty n -> -- type
-    Either (TypeError (ty n)) () -- type
+    ty n -> -- expected type
+    Either (TypeError (ty n)) () -- typecheck result
   checkSig ctx node expectedType = do
     inferredType <- inferSig ctx node
     unless (alphaEquiv (nameMapToScope ctx) inferredType expectedType) $
@@ -104,9 +147,9 @@ class (AlphaEquiv ty) => TypingSig binder ty sig where
     (Foil.Distinct n) =>
     Context' ty n -> -- context
     sig (Scoped binder ty n) (ty n) -> -- expr node
-    Either (TypeError (ty n)) (ty n) -- type
+    Either (TypeError (ty n)) (ty n) -- inferred type
 
-instance TypingSig (FreeFoil.AST TypeSig) TypeSig where
+instance TypingSig (FreeFoil.AST TypeSig) ExpSig where
   inferSig ctx = \case
     ETrueSig -> return TBool
     EAddSig l r -> do
@@ -143,6 +186,7 @@ instance TypingSig (FreeFoil.AST TypeSig) TypeSig where
       bodyType' <- unsinkType' binder ctx bodyType
       return (TArrow argType bodyType')
     ELetSig (Scoped binder binderType) bodyType -> do
+
       return bodyType
     where
       -- isExpectedToBe :: AlphaEquiv ty => Foil.Scope n -> ty n -> ty n -> Either (TypeError (ty n)) ()
