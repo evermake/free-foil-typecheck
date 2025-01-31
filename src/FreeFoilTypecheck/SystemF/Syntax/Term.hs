@@ -76,7 +76,7 @@ fromTerm =
     convertFromTermSig
     -- (\_ -> error "location missing")
     (Raw.EVar)
-    fromFoilPattern
+    (fromFoilPattern mkVarIdent)
     Raw.ScopedTerm
     mkVarIdent
   where

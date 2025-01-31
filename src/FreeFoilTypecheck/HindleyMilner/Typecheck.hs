@@ -118,7 +118,7 @@ applySubstToType _ (FreeFoil.Var x) = FreeFoil.Var x
 applySubstToType subst (FreeFoil.Node node) =
   FreeFoil.Node (bimap (applySubstToScopedType subst) (applySubstToType subst) node)
   where
-    applySubstToScopedType :: (Foil.Distinct n) => USubst n -> FreeFoil.ScopedAST TypeSig n -> FreeFoil.ScopedAST TypeSig n
+    applySubstToScopedType :: (Foil.Distinct n) => USubst n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n
     applySubstToScopedType subst' (FreeFoil.ScopedAST binder body) =
       case (Foil.assertExt binder, Foil.assertDistinct binder) of
         (Foil.Ext, Foil.Distinct) ->
@@ -198,7 +198,7 @@ reconstructType (FreeFoil.Var x) = do
   let (specTyp, freshId2) = specialize xTyp freshId
   put (TypingContext constrs subst ctx freshId2)
   return specTyp
-reconstructType (ELet eWhat x eExpr) = do
+reconstructType (ELet eWhat (FoilPatternVar x) eExpr) = do
   whatTyp <- reconstructType eWhat
   unifyTypeCheck
   (TypingContext _ substs ctx _) <- get
@@ -228,7 +228,7 @@ reconstructType (EIsZero e) = do
   eTyp <- reconstructType e
   addConstraints [(eTyp, TNat)]
   return TBool
-reconstructType (EAbs x eBody) = do
+reconstructType (EAbs (FoilPatternVar x) eBody) = do
   paramType <- freshTypeVar
   bodyTyp <-
     enterScope x paramType $
@@ -245,7 +245,7 @@ reconstructType (ETyped e typ_) = do
   eTyp <- reconstructType e
   addConstraints [(eTyp, typ)]
   return typ
-reconstructType (EFor eFrom eTo x eBody) = do
+reconstructType (EFor eFrom eTo (FoilPatternVar x) eBody) = do
   fromTyp <- reconstructType eFrom
   toTyp <- reconstructType eTo
   addConstraints [(fromTyp, TNat), (toTyp, TNat)]
@@ -279,7 +279,7 @@ generalize = go Foil.emptyScope
       let newScope = Foil.extendScope binder ctx
           x' = FreeFoil.Var (Foil.nameOf binder)
           type' = applySubstToType (x, x') (Foil.sink type_)
-       in TForAll binder (go newScope xs type')
+       in TForAll (FoilTPatternVar binder) (go newScope xs type')
 
 -- addSubst
 --   :: forall e i o i'. Substitution e i o
@@ -296,7 +296,7 @@ generalize = go Foil.emptyScope
 -- >>> specialize "forall a. forall b. a -> b" 6
 -- (?u6 -> ?u7,8)
 specialize :: Type' -> Int -> (Type', Int)
-specialize (TForAll binder type_) freshId =
+specialize (TForAll (FoilTPatternVar binder) type_) freshId =
   let subst = Foil.addSubst Foil.identitySubst binder (TUVar (makeIdent freshId))
    in specialize (FreeFoil.substitute Foil.emptyScope subst type_) (freshId + 1)
 specialize type_ freshId = (type_, freshId)

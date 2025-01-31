@@ -50,7 +50,7 @@ eval scope (EIsZero n) =
       | otherwise -> Right EFalse
     _ -> Left "Unsupported expression in iszero"
 eval scope (ETyped e _) = eval scope e
-eval scope (ELet e1 x e2) = do
+eval scope (ELet e1 (FoilPatternVar x) e2) = do
   e1' <- eval scope e1
   let subst = addSubst identitySubst x e1'
   eval scope (substitute scope subst e2)
@@ -59,11 +59,11 @@ eval scope (EApp e1 e2) = do
   e1' <- eval scope e1
   e2' <- eval scope e2
   case e1' of
-    EAbs x e -> do
+    EAbs (FoilPatternVar x) e -> do
       let subst = addSubst identitySubst x e2'
       eval scope (substitute scope subst e)
     _ -> Left "Unsupported expression in application"
-eval scope (EFor e1 e2 x expr) = do
+eval scope (EFor e1 e2 (FoilPatternVar x) expr) = do
   e1_val <- eval scope e1
   e2_val <- eval scope e2
   case (e1_val, e2_val) of

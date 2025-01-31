@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -9,6 +11,7 @@
 module FreeFoilTypecheck.HindleyMilner.Syntax where
 
 import qualified Control.Monad.Foil as Foil
+import Control.Monad.Foil.TH
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.TH
 import Data.Bifunctor.TH
@@ -47,6 +50,13 @@ mkPatternSynonyms ''ExpSig
 mkConvertToFreeFoil ''Raw.Exp ''Raw.Ident ''Raw.ScopedExp ''Raw.Pattern
 mkConvertFromFreeFoil ''Raw.Exp ''Raw.Ident ''Raw.ScopedExp ''Raw.Pattern
 
+-- ** Scope-safe patterns
+
+mkFoilPattern ''Raw.Ident ''Raw.Pattern
+deriveCoSinkable ''Raw.Ident ''Raw.Pattern
+mkToFoilPattern ''Raw.Ident ''Raw.Pattern
+mkFromFoilPattern ''Raw.Ident ''Raw.Pattern
+
 -- * Generated code (types)
 
 -- ** Signature
@@ -68,11 +78,21 @@ mkPatternSynonyms ''TypeSig
 mkConvertToFreeFoil ''Raw.Type ''Raw.Ident ''Raw.ScopedType ''Raw.TypePattern
 mkConvertFromFreeFoil ''Raw.Type ''Raw.Ident ''Raw.ScopedType ''Raw.TypePattern
 
+-- ** Scope-safe type patterns
+
+mkFoilPattern ''Raw.Ident ''Raw.TypePattern
+deriveCoSinkable ''Raw.Ident ''Raw.TypePattern
+mkToFoilPattern ''Raw.Ident ''Raw.TypePattern
+mkFromFoilPattern ''Raw.Ident ''Raw.TypePattern
+
+instance Foil.UnifiablePattern FoilTypePattern where
+  unifyPatterns (FoilTPatternVar x) (FoilTPatternVar y) = Foil.unifyNameBinders x y
+
 -- * User-defined code
 
-type Exp n = AST ExpSig n
+type Exp n = AST FoilPattern ExpSig n
 
-type Type n = AST TypeSig n
+type Type n = AST FoilTypePattern TypeSig n
 
 type Type' = Type Foil.VoidS
 
@@ -80,8 +100,8 @@ type Type' = Type Foil.VoidS
 
 -- | Convert 'Raw.Exp' into a scope-safe expression.
 -- This is a special case of 'convertToAST'.
-toExp :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Ident (Foil.Name n) -> Raw.Exp -> AST ExpSig n
-toExp = convertToAST convertToExpSig getPatternBinder getExpFromScopedExp
+toExp :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Ident (Foil.Name n) -> Raw.Exp -> AST FoilPattern ExpSig n
+toExp = convertToAST convertToExpSig toFoilPattern getExpFromScopedExp
 
 -- | Convert 'Raw.Exp' into a closed scope-safe expression.
 -- This is a special case of 'toExp'.
@@ -91,7 +111,7 @@ toExpClosed = toExp Foil.emptyScope Map.empty
 -- | Convert a scope-safe representation back into 'Raw.Exp'.
 -- This is a special case of 'convertFromAST'.
 --
--- 'Raw.VarIdent' names are generated based on the raw identifiers in the underlying foil representation.
+-- 'Raw.Ident' names are generated based on the raw identifiers in the underlying foil representation.
 --
 -- This function does not recover location information for variables, patterns, or scoped terms.
 fromExp :: Exp n -> Raw.Exp
@@ -99,9 +119,11 @@ fromExp =
   convertFromAST
     convertFromExpSig
     Raw.EVar
-    Raw.PatternVar
+    (fromFoilPattern mkIdent)
     Raw.ScopedExp
     (\n -> Raw.Ident ("x" ++ show n))
+  where
+    mkIdent n = Raw.Ident ("x" ++ show n)
 
 -- | Parse scope-safe terms via raw representation.
 --
@@ -120,8 +142,8 @@ instance Show (Exp n) where
 
 -- | Convert 'Raw.Exp' into a scope-safe expression.
 -- This is a special case of 'convertToAST'.
-toType :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Ident (Foil.Name n) -> Raw.Type -> AST TypeSig n
-toType = convertToAST convertToTypeSig getTypePatternBinder getTypeFromScopedType
+toType :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Ident (Foil.Name n) -> Raw.Type -> AST FoilTypePattern TypeSig n
+toType = convertToAST convertToTypeSig toFoilTypePattern getTypeFromScopedType
 
 -- | Convert 'Raw.Type' into a closed scope-safe expression.
 -- This is a special case of 'toType'.
@@ -131,7 +153,7 @@ toTypeClosed = toType Foil.emptyScope Map.empty
 -- | Convert a scope-safe representation back into 'Raw.Type'.
 -- This is a special case of 'convertFromAST'.
 --
--- 'Raw.VarIdent' names are generated based on the raw identifiers in the underlying foil representation.
+-- 'Raw.Ident' names are generated based on the raw identifiers in the underlying foil representation.
 --
 -- This function does not recover location information for variables, patterns, or scoped terms.
 fromType :: Type n -> Raw.Type
@@ -139,9 +161,11 @@ fromType =
   convertFromAST
     convertFromTypeSig
     Raw.TVar
-    Raw.TPatternVar
+    (fromFoilTypePattern mkIdent)
     Raw.ScopedType
     (\n -> Raw.Ident ("x" ++ show n))
+  where
+    mkIdent n = Raw.Ident ("x" ++ show n)
 
 -- | Parse scope-safe terms via raw representation.
 --

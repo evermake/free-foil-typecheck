@@ -1,4 +1,4 @@
-module FreeFoilTypecheck.SystemF.TypecheckSpec where
+module FreeFoilTypecheck.SystemF.InterpretSpec where
 
 import Control.Monad (forM_)
 import FreeFoilTypecheck.SystemF.Interpret

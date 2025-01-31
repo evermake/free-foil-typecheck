@@ -58,7 +58,10 @@ typecheck scope (ELet e1 (FoilPatternVar binder) e2) expectedType = do
     Foil.Distinct -> do
       type1 <- inferType scope e1 
       let newScope = extendContext binder type1 scope 
-      typecheck newScope e2 expectedType -- FIXME
+      case (Foil.assertDistinct binder, Foil.assertExt binder) of
+        (Foil.Distinct, Foil.Ext) -> do
+          type2 <- typecheck newScope e2 (Foil.sink expectedType) -- FIXME
+          unsinkType scope type2
 typecheck scope (EAbsUntyped pat body) expectedType = do
   case expectedType of
     TArrow argType _resultType ->
