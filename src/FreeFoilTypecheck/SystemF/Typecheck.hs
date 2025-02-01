@@ -7,6 +7,7 @@
 
 module FreeFoilTypecheck.SystemF.Typecheck where
 
+import Data.Bifunctor (Bifunctor)
 import qualified Control.Monad.Foil          as Foil
 import qualified Control.Monad.Foil.Relative as Foil
 import qualified Control.Monad.Foil.Internal as Foil
@@ -125,44 +126,63 @@ typecheck scope (EApp e1 e2) expectedType = do
 --  Γ, X ⊢ t ⇐ T
 -- ———————————————
 -- Γ ⊢ ΛX.t ⇐ ∀X.T
-typecheck scope (ETAbs (FoilPatternVar pat) body) expectedType = do
+typecheck scope (ETAbs pat body) expectedType = do
   case expectedType of
-    TForAll (FoilPatternVar tpat) bodyType -> do
-      case Foil.unifyNameBinders pat tpat of
-        Foil.SameNameBinders binders -> do
+    TForAll tpat bodyType -> do
+      case unifyScopes (nameMapToScope scope) (FreeFoil.ScopedAST pat body) (FreeFoil.ScopedAST tpat bodyType) of
+        Nothing -> Left "non-unifiable patterns"
+        Just (PairOfScopedAST binders body' bodyType') -> do
           let newScope = extendContext' (Foil.nameBindersList binders) TType scope
           case (Foil.assertDistinct binders, Foil.assertExt binders) of
             (Foil.Distinct, Foil.Ext) -> do
-              type' <- typecheck newScope body bodyType
-              unsinkType scope type'
-        Foil.RenameLeftNameBinder binders renameL -> do
-          let newScope = extendContext' (Foil.nameBindersList binders) TType scope
-          case (Foil.assertDistinct binders, Foil.assertExt binders) of
-            (Foil.Distinct, Foil.Ext) -> do
-              let body' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameL) body
-              type' <- typecheck newScope body' bodyType
-              unsinkType scope type'
-        Foil.RenameRightNameBinder binders renameR -> do
-          let newScope = extendContext' (Foil.nameBindersList binders) TType scope
-          case (Foil.assertDistinct binders, Foil.assertExt binders) of
-            (Foil.Distinct, Foil.Ext) -> do
-              let bodyType' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameR) bodyType
-              type' <- typecheck newScope body bodyType'
-              unsinkType scope type'
-        Foil.RenameBothBinders binders renameL renameR -> do
-          let newScope = extendContext' (Foil.nameBindersList binders) TType scope
-          case (Foil.assertDistinct binders, Foil.assertExt binders) of
-            (Foil.Distinct, Foil.Ext) -> do
-              let body' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameL) body
-                  bodyType' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameR) bodyType
               type' <- typecheck newScope body' bodyType'
               unsinkType scope type'
-        Foil.NotUnifiable -> Left "non-unifiable patterns"
     _ -> Left ("unexpected type abstraction when typechecking against non-forall type: " <> show expectedType)
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
   (scope, typeOfE) `shouldBe` expectedType
   return typeOfE
+
+-- data ScopedAST binder sig n where
+--   ScopedAST :: binder n l -> AST binder sig l -> ScopedAST binder sig n
+
+data PairOfScopedAST binder sig n where
+  PairOfScopedAST :: Foil.NameBinders n l -> FreeFoil.AST binder sig l -> FreeFoil.AST binder sig l -> PairOfScopedAST binder sig n
+
+unifyScopes
+  :: (Foil.Distinct n, Foil.UnifiablePattern binder, Bifunctor sig)
+  => Foil.Scope n
+  -> FreeFoil.ScopedAST binder sig n
+  -> FreeFoil.ScopedAST binder sig n
+  -> Maybe (PairOfScopedAST binder sig n)
+unifyScopes scope (FreeFoil.ScopedAST binderL bodyL) (FreeFoil.ScopedAST binderR bodyR) =
+  case Foil.unifyPatterns binderL binderR of
+    Foil.SameNameBinders binders -> do
+      Just (PairOfScopedAST binders bodyL bodyR)
+    
+    Foil.RenameLeftNameBinder binders renameL -> do
+      case (Foil.assertDistinct binders, Foil.assertExt binders) of
+        (Foil.Distinct, Foil.Ext) -> do
+          let newScope = Foil.extendScopePattern binders scope
+              bodyL' = Foil.liftRM newScope (Foil.fromNameBinderRenaming renameL) bodyL
+          Just (PairOfScopedAST binders bodyL' bodyR)
+
+    Foil.RenameRightNameBinder binders renameR -> do
+      case (Foil.assertDistinct binders, Foil.assertExt binders) of
+        (Foil.Distinct, Foil.Ext) -> do
+          let newScope = Foil.extendScopePattern binders scope
+              bodyR' = Foil.liftRM newScope (Foil.fromNameBinderRenaming renameR) bodyR
+          Just (PairOfScopedAST binders bodyL bodyR')
+
+    Foil.RenameBothBinders binders renameL renameR -> do
+      case (Foil.assertDistinct binders, Foil.assertExt binders) of
+        (Foil.Distinct, Foil.Ext) -> do
+          let newScope = Foil.extendScopePattern binders scope
+              bodyL' = Foil.liftRM newScope (Foil.fromNameBinderRenaming renameL) bodyL
+              bodyR' = Foil.liftRM newScope (Foil.fromNameBinderRenaming renameR) bodyR
+          Just (PairOfScopedAST binders bodyL' bodyR')
+
+    Foil.NotUnifiable -> Nothing
 
 inferType
   :: (Foil.Distinct n)
