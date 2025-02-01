@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE GADTs          #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -7,6 +8,7 @@
 module FreeFoilTypecheck.SystemF.Typecheck where
 
 import qualified Control.Monad.Foil          as Foil
+import qualified Control.Monad.Foil.Relative as Foil
 import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil     as FreeFoil
 import           Data.Bifoldable             (Bifoldable (bifoldMap))
@@ -42,6 +44,28 @@ extendContext binder type_ =
     (Foil.Ext, Foil.Distinct) ->
       fmap Foil.sink . Foil.addNameBinder binder type_
 
+extendContext' :: Foil.Distinct n => Foil.NameBinderList n l -> Term n -> Context n -> Context l
+extendContext' Foil.NameBinderListEmpty _type = id
+extendContext' (Foil.NameBinderListCons binder binders) type_ = 
+  case (Foil.assertExt binder, Foil.assertDistinct binder) of
+    (Foil.Ext, Foil.Distinct) ->
+      extendContext' binders (Foil.sink type_) . extendContext binder type_
+  
+shouldBe :: Foil.Distinct n => (Foil.NameMap n (Term n), Term n) -> Term n -> Either String ()
+shouldBe (scope, actualType) expectedType
+  | sameType = return ()
+  | otherwise = Left $
+      unlines
+        [ "expected type",
+          "  " ++ show expectedType,
+          "but got type",
+          "  " ++ Raw.printTree (fromTerm actualType),
+          "when typechecking expession",
+          "  " -- ++ show e
+        ]
+  where
+    sameType = FreeFoil.alphaEquiv (nameMapToScope scope) actualType expectedType 
+
 typecheck
   :: Foil.Distinct n
   => Context n
@@ -62,44 +86,83 @@ typecheck scope (ELet e1 (FoilPatternVar binder) e2) expectedType = do
         (Foil.Distinct, Foil.Ext) -> do
           type2 <- typecheck newScope e2 (Foil.sink expectedType) -- FIXME
           unsinkType scope type2
+
+-- Γ, x : A ⊢ t ⇐ B
+-- —————————————————————          
+-- Γ  ⊢  λx. t  ⇐  A → B
 typecheck scope (EAbsUntyped pat body) expectedType = do
   case expectedType of
     TArrow argType _resultType ->
       typecheck scope (EAbsTyped argType pat body) expectedType
-    _ -> error ("unexpected λ-abstraction when typechecking against functional type: " <> show expectedType)
-typecheck scope (EAbsTyped argType pat body) expectedType = do
+    _ -> Left ("unexpected λ-abstraction when typechecking against functional type: " <> show expectedType)
+
+-- Γ, x : A ⊢ t ⇐ B
+-- ————————————————————————
+-- Γ  ⊢  λx:A. t  ⇐  A → B
+typecheck scope (EAbsTyped argTypeActual (FoilPatternVar pat) body) expectedType = do
   case expectedType of
-    TArrow _resultType -> do
-      let newScope = extendContext pat argType scope
-      typecheck newScope body (Foil.sink expectedType)
-    _ -> error ("unexpected λ-abstraction when typechecking against non-functional type: " <> show expectedType)
+    TArrow argType resultType -> do
+        (scope, argTypeActual) `shouldBe` argType
+        let newScope = extendContext pat argType scope
+        case (Foil.assertDistinct pat, Foil.assertExt pat) of
+          (Foil.Distinct, Foil.Ext) -> do
+            type' <- typecheck newScope body (Foil.sink resultType)
+            unsinkType scope type'
+    _ -> Left ("unexpected λ-abstraction when typechecking against non-functional type: " <> show expectedType)
+
+-- Γ ⊢ t₁ ⇒ A → C     Γ ⊢ t₂ ⇐ A     B = C
+-- ————————————————————————————————————————
+--         Γ ⊢ t₁ t₂ ⇐ B
 typecheck scope (EApp e1 e2) expectedType = do
   type1 <- inferType scope e1
   case type1 of
-    TArrow argType _resultType -> do
-      typecheck scope e2 argType
+    TArrow argType resultType -> do
+      (scope, resultType) `shouldBe` expectedType
+      _ <- typecheck scope e2 argType
       return expectedType
-    _ -> error ("unexpected application when typechecking against non-functional type: " <> show type1)
-typecheck scope (ETAbs pat body) expectedType = do
+    _ -> Left ("unexpected application when typechecking against non-functional type: " <> show type1)
+
+--  Γ, X ⊢ t ⇐ T
+-- ———————————————
+-- Γ ⊢ ΛX.t ⇐ ∀X.T
+typecheck scope (ETAbs (FoilPatternVar pat) body) expectedType = do
   case expectedType of
-    TForAll _resultType -> do
-      let newScope = extendContext pat TType scope
-      typecheck newScope body (Foil.sink expectedType)
-    _ -> error ("unexpected type abstraction when typechecking against non-forall type: " <> show expectedType)
+    TForAll (FoilPatternVar tpat) bodyType -> do
+      case Foil.unifyNameBinders pat tpat of
+        Foil.SameNameBinders binders -> do
+          let newScope = extendContext' (Foil.nameBindersList binders) TType scope
+          case (Foil.assertDistinct binders, Foil.assertExt binders) of
+            (Foil.Distinct, Foil.Ext) -> do
+              type' <- typecheck newScope body bodyType
+              unsinkType scope type'
+        Foil.RenameLeftNameBinder binders renameL -> do
+          let newScope = extendContext' (Foil.nameBindersList binders) TType scope
+          case (Foil.assertDistinct binders, Foil.assertExt binders) of
+            (Foil.Distinct, Foil.Ext) -> do
+              let body' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameL) body
+              type' <- typecheck newScope body' bodyType
+              unsinkType scope type'
+        Foil.RenameRightNameBinder binders renameR -> do
+          let newScope = extendContext' (Foil.nameBindersList binders) TType scope
+          case (Foil.assertDistinct binders, Foil.assertExt binders) of
+            (Foil.Distinct, Foil.Ext) -> do
+              let bodyType' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameR) bodyType
+              type' <- typecheck newScope body bodyType'
+              unsinkType scope type'
+        Foil.RenameBothBinders binders renameL renameR -> do
+          let newScope = extendContext' (Foil.nameBindersList binders) TType scope
+          case (Foil.assertDistinct binders, Foil.assertExt binders) of
+            (Foil.Distinct, Foil.Ext) -> do
+              let body' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameL) body
+                  bodyType' = Foil.liftRM (nameMapToScope newScope) (Foil.fromNameBinderRenaming renameR) bodyType
+              type' <- typecheck newScope body' bodyType'
+              unsinkType scope type'
+        Foil.NotUnifiable -> Left "non-unifiable patterns"
+    _ -> Left ("unexpected type abstraction when typechecking against non-forall type: " <> show expectedType)
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
-  if FreeFoil.alphaEquiv (nameMapToScope scope) typeOfE expectedType 
-    then return typeOfE
-    else
-      Left $
-        unlines
-          [ "expected type",
-            "  " ++ show expectedType,
-            "but got type",
-            "  " ++ Raw.printTree (fromTerm typeOfE),
-            "when typechecking expession",
-            "  " ++ show e
-          ]
+  (scope, typeOfE) `shouldBe` expectedType
+  return typeOfE
 
 inferType
   :: (Foil.Distinct n)
