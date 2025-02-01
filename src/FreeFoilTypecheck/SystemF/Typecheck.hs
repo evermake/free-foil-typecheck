@@ -67,6 +67,25 @@ typecheck scope (EAbsUntyped pat body) expectedType = do
     TArrow argType _resultType ->
       typecheck scope (EAbsTyped argType pat body) expectedType
     _ -> error ("unexpected λ-abstraction when typechecking against functional type: " <> show expectedType)
+typecheck scope (EAbsTyped argType pat body) expectedType = do
+  case expectedType of
+    TArrow _resultType -> do
+      let newScope = extendContext pat argType scope
+      typecheck newScope body (Foil.sink expectedType)
+    _ -> error ("unexpected λ-abstraction when typechecking against non-functional type: " <> show expectedType)
+typecheck scope (EApp e1 e2) expectedType = do
+  type1 <- inferType scope e1
+  case type1 of
+    TArrow argType _resultType -> do
+      typecheck scope e2 argType
+      return expectedType
+    _ -> error ("unexpected application when typechecking against non-functional type: " <> show type1)
+typecheck scope (ETAbs pat body) expectedType = do
+  case expectedType of
+    TForAll _resultType -> do
+      let newScope = extendContext pat TType scope
+      typecheck newScope body (Foil.sink expectedType)
+    _ -> error ("unexpected type abstraction when typechecking against non-forall type: " <> show expectedType)
 typecheck scope e expectedType = do
   typeOfE <- inferType scope e
   if FreeFoil.alphaEquiv (nameMapToScope scope) typeOfE expectedType 
