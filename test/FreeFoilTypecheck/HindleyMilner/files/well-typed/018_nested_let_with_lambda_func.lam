@@ -1,0 +1,3 @@
+let x0 = λz.z in
+    let x1 = λz.z x0 x0 in
+        x1

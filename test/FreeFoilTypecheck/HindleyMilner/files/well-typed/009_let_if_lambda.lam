@@ -1,0 +1,1 @@
+let f = if iszero (5) then (λx. x) else (λx. x + 1) in f 5

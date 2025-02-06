@@ -1,0 +1,3 @@
+let x = 1 in
+  let id = λx.x
+    in (let x = true in id (if x then 1 else 2)) + (id x)

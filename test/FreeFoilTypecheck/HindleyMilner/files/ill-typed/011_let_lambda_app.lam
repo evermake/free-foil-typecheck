@@ -1,0 +1,1 @@
+let twice = λy. y y in let retone = λq.1 in twice retone twice

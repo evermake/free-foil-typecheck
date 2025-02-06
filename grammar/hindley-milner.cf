@@ -1,3 +1,5 @@
+-- Expressions grammar.
+
 PatternVar. Pattern ::= Ident ;
 
 EVar.    Exp3 ::= Ident ;
@@ -10,15 +12,26 @@ EIf.     Exp1 ::= "if" Exp1 "then" Exp1 "else" Exp1 ;
 EIsZero. Exp2 ::= "iszero" "(" Exp ")" ;
 ETyped.  Exp  ::= Exp1 ":" Type ;
 ELet.    Exp1 ::= "let" Pattern "=" Exp1 "in" ScopedExp ;
-EAbs.    Exp1 ::= "λ" Pattern ":" Type "." ScopedExp ;
+EAbs.    Exp1 ::= "λ" Pattern "." ScopedExp ;
 EApp.    Exp1 ::= Exp1 Exp2 ;
 EFor.    Exp1 ::= "for" Pattern "in" "[" Exp1 ".." Exp1 "]" "do" ScopedExp ;
 
-ScopedExp. ScopedExp ::= Exp1 ;
-
--- https://bnfc.readthedocs.io/en/latest/lbnf.html#coercions
 coercions Exp 3 ;
 
-TNat.  Type ::= "Nat" ;
-TBool. Type ::= "Bool" ;
-TArrow. Type ::= Type "->" Type ;
+ScopedExp. ScopedExp ::= Exp1 ;
+
+-- Types grammar.
+
+token UVarIdent ('?' letter (letter | digit | '_')*) ;
+TPatternVar. TypePattern ::= Ident ;
+
+TUVar.   Type2 ::= UVarIdent ;
+TNat.    Type2 ::= "Nat" ;
+TBool.   Type2 ::= "Bool" ;
+TArrow.  Type1 ::= Type2 "->" Type1 ;
+TVar.    Type2 ::= Ident ;
+TForAll. Type ::= "forall" TypePattern "." ScopedType ;
+
+coercions Type 2 ;
+
+ScopedType. ScopedType ::= Type1 ;

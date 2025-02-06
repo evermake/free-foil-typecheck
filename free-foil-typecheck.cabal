@@ -1,0 +1,193 @@
+cabal-version: 1.24
+
+-- This file has been generated from package.yaml by hpack version 0.36.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           free-foil-typecheck
+version:        0.0.1
+synopsis:       Type systems implementation powered by Free Foil.
+description:    Please see the README on GitHub at <https://github.com/evermake/free-foil-typecheck#readme>
+category:       Language
+homepage:       https://github.com/evermake/free-foil-typecheck#readme
+bug-reports:    https://github.com/evermake/free-foil-typecheck/issues
+build-type:     Custom
+extra-source-files:
+    README.md
+    grammar/hindley-milner.cf
+    grammar/system-f.cf
+
+source-repository head
+  type: git
+  location: https://github.com/evermake/free-foil-typecheck
+
+custom-setup
+  setup-depends:
+      Cabal >=2.4.0.1 && <4.0
+    , PyF
+    , base >=4.11.0.0 && <5.0
+    , process >=1.6.3.0
+
+library
+  exposed-modules:
+      FreeFoilTypecheck.HindleyMilner.Eval
+      FreeFoilTypecheck.HindleyMilner.Interpret
+      FreeFoilTypecheck.HindleyMilner.Parser.Abs
+      FreeFoilTypecheck.HindleyMilner.Parser.Lex
+      FreeFoilTypecheck.HindleyMilner.Parser.Par
+      FreeFoilTypecheck.HindleyMilner.Parser.Print
+      FreeFoilTypecheck.HindleyMilner.Syntax
+      FreeFoilTypecheck.HindleyMilner.Typecheck
+      FreeFoilTypecheck.SystemF.Eval
+      FreeFoilTypecheck.SystemF.Interpret
+      FreeFoilTypecheck.SystemF.Parser.Abs
+      FreeFoilTypecheck.SystemF.Parser.Lex
+      FreeFoilTypecheck.SystemF.Parser.Par
+      FreeFoilTypecheck.SystemF.Parser.Print
+      FreeFoilTypecheck.SystemF.Syntax
+      FreeFoilTypecheck.SystemF.Syntax.Pattern
+      FreeFoilTypecheck.SystemF.Syntax.Term
+      FreeFoilTypecheck.SystemF.Typecheck
+  other-modules:
+      Paths_free_foil_typecheck
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -Werror
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , free-foil >=0.2.0
+  default-language: Haskell2010
+
+executable interpreter-hm
+  main-is: Interpreter.hs
+  hs-source-dirs:
+      app/HindleyMilner
+  ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+  default-language: Haskell2010
+
+executable interpreter-sf
+  main-is: Interpreter.hs
+  hs-source-dirs:
+      app/SystemF
+  ghc-options: -Wall -Werror
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+  default-language: Haskell2010
+
+executable repl-hm
+  main-is: Repl.hs
+  hs-source-dirs:
+      app/HindleyMilner
+  ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+  default-language: Haskell2010
+
+executable repl-sf
+  main-is: Repl.hs
+  hs-source-dirs:
+      app/SystemF
+  ghc-options: -Wall -Werror
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+  default-language: Haskell2010
+
+test-suite doctests
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs:
+      src/
+      test/doctests
+  ghc-options: -Wall -Werror
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , doctest-parallel
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      FreeFoilTypecheck.HindleyMilner.TypecheckSpec
+      FreeFoilTypecheck.SystemF.InterpretSpec
+      Paths_free_foil_typecheck
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-tools:
+      alex >=3.2.4
+    , happy >=1.19.9
+  build-tool-depends:
+      BNFC:bnfc >=2.9.4.1
+  build-depends:
+      array >=0.5.3.0
+    , base >=4.7 && <5
+    , bifunctors
+    , containers
+    , directory
+    , filepath
+    , free-foil >=0.2.0
+    , free-foil-typecheck
+    , hspec
+    , hspec-discover
+  default-language: Haskell2010

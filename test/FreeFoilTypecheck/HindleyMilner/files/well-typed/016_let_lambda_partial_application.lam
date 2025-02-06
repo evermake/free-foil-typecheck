@@ -1,0 +1,1 @@
+let applfunc = λf. f 2 in applfunc (let func = λx. λy. x + 1 - y in func 1)
