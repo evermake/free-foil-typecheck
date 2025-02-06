@@ -16,13 +16,17 @@ Current goals are:
 
 ## Current progress
 
-At the moment, our work in this repository is divided into two branches: [`system-f`](https://github.com/evermake/free-foil-typecheck/tree/system-f) and [`unification`](https://github.com/evermake/free-foil-typecheck/tree/unification), where you can find our current results on bidirectional typing and Hindley-Milner-style type inference, respectively. Currently, we're working on implementation of type checking and type inference algorithms for a concrete small language.
+Our work in this repository contains implementations of bidirectional typing (System F) and Hindley-Milner-style type inference. Currently, we're working on implementing type checking and type inference algorithms for a concrete small language.
 
-Both branches have the same directory structure:
-- `grammar/` — BNFC grammar describing our concrete language syntax.
-- `src/` — source code of type checker.
-- `app/` — source code of REPL and interpreter binaries for playing with the current implementation.
-- `test/` — scripts and test-cases with input programs for testing type checker functionality.
+The repository has the following directory structure:
+- `grammar/` — BNFC grammars describing concrete language syntaxes.
+- `src/` — source code of type inference and type checking algorithms.
+- `app/` — source code of REPL and interpreter binaries for playing with the current implementations.
+- `test/` — scripts and test-cases with input programs for testing type checkers functionality.
+
+Contents of the mentioned directories are divided for Hindley-Milner and System F implementations.
+
+---
 
 [^1]: Nikolai Kudasov, Renata Shakirova, Egor Shalagin, and Karina Tyulebaeva. 2024. Free Foil: Generating Efficient and Scope-Safe Abstract Syntax. In 2024 4th International Conference on Code Quality (ICCQ). 1–16. https://doi.org/10.1109/ICCQ60895.2024.10576867
 [^2]: Abdelrahman Abounegm, Nikolai Kudasov, and Alexey Stepanov. 2024. Teaching Type Systems Implementation with Stella, an Extensible Statically Typed Programming Language. In Proceedings of the Thirteenth Workshop on Trends in Functional Programming in Education, South Orange, New Jersey, USA, 9th January 2024 (Electronic Proceedings in Theoretical Computer Science, Vol. 405), Stephen Chang (Ed.). Open Publishing Association, 1–19. https://doi.org/10.4204/EPTCS.405.1
