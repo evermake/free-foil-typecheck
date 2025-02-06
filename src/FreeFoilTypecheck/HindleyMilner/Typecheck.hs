@@ -182,12 +182,6 @@ freshTypeVar = do
 
 -- | Recursively "reconstructs" type of an expression.
 -- On success, returns the "reconstructed" type and collected constraints.
---
--- >>> reconstructType [] 1 Foil.emptyNameMap "λx. λy. x y"
--- Right (?u1 -> ?u2 -> ?u3,[(?u1,?u2 -> ?u3)],4)
---
--- >>> reconstructType [] 1 Foil.emptyNameMap "(λx. λy. (let g = (x y) in g))"
--- Right (?u1 -> ?u2 -> ?u4,[],5)
 reconstructType :: Exp n -> TypeCheck n Type'
 reconstructType ETrue = return TBool
 reconstructType EFalse = return TBool
