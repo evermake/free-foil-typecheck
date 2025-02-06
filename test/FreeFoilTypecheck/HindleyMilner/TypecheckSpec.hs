@@ -15,14 +15,14 @@ import Test.Hspec
 spec :: Spec
 spec = parallel $ do
   describe "well-typed expressions" $ do
-    paths <- runIO (testFilesInDir "./FreeFoilTypecheck/HindleyMilner/test/files/well-typed")
+    paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files/well-typed")
     forM_ (sort (filter (\p -> not (".expected.lam" `isSuffixOf` p)) paths)) $ \path -> it path $ do
       contents <- readFile path
       expectedTypeContents <- readFile (replaceExtension path ".expected.lam")
       programTypesMatch contents expectedTypeContents `shouldBe` Right True
 
   describe "ill-typed expressions" $ do
-    paths <- runIO (testFilesInDir "./FreeFoilTypecheck/HindleyMilner/test/files/ill-typed")
+    paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files/ill-typed")
     forM_ (sort paths) $ \path -> it path $ do
       contents <- readFile path
       interpret contents `shouldSatisfy` isTypeError
