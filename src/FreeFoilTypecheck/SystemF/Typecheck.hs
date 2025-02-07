@@ -37,7 +37,48 @@ typecheckClosed
   -> Either String (Term Foil.VoidS) {- type -}
 typecheckClosed = typecheck Foil.emptyNameMap
 
+data Scoped binder t n where
+  Scoped :: binder n l -> t l -> Scoped binder t n
+
+data TypeError ty
+  = TypeErrorUnexpectedType ty ty
+  | TypeErrorUnexpectedDependentType
+
 type Context n = Foil.NameMap n (Term n)
+
+type Context' ty n = Foil.NameMap n (ty n)
+
+-- class BTypingSig (ty :: Foil.S -> *) (sig :: * -> * -> *) where 
+--   inferSigB ::
+--     sig (Scoped binder ty n) (ty n) ->
+--     TypeCheck n ty ty
+
+class AlphaEquiv t where
+  alphaEquiv :: (Foil.Distinct n) => Foil.Scope n -> t n -> t n -> Bool
+
+instance
+  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig) =>
+  AlphaEquiv (FreeFoil.AST binder sig)
+  where
+  alphaEquiv = FreeFoil.alphaEquiv
+
+class (AlphaEquiv ty) => TypingSig binder ty sig where
+  checkSig ::
+    (Foil.Distinct n) =>
+    Context' ty n -> -- context
+    sig (Scoped binder ty n) (ty n) -> -- expr node
+    ty n -> -- type
+    Either (TypeError (ty n)) () -- type
+  checkSig ctx node expectedType = do
+    inferredType <- inferSig ctx node
+    unless (alphaEquiv (nameMapToScope ctx) inferredType expectedType) $
+      Left (TypeErrorUnexpectedType inferredType expectedType)
+  inferSig ::
+    (Foil.Distinct n) =>
+    Context' ty n -> -- context
+    sig (Scoped binder ty n) (ty n) -> -- expr node
+    Either (TypeError (ty n)) (ty n) -- type
+
 
 extendContext :: Foil.Distinct n => Foil.NameBinder n l -> Term n -> Context n -> Context l
 extendContext binder type_ =
