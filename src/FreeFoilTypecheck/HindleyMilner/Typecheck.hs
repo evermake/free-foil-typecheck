@@ -1,14 +1,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
 module FreeFoilTypecheck.HindleyMilner.Typecheck where
 
-import Control.Monad (ap, foldM)
+import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil as FreeFoil
 import qualified Control.Monad.Foil.Internal as Foil
@@ -305,6 +305,6 @@ specialize :: Type' -> TypeCheck n Type'
 specialize = \case
   TForAll (FoilTPatternVar binder) typ' -> do
     x <- freshTypeVar
-    let subst = Foil.addSubst Foil.identitySubst binder (TUVar x)
+    let subst = Foil.addSubst Foil.identitySubst binder x
     specialize (FreeFoil.substitute Foil.emptyScope subst typ')
   typ' -> return typ'
