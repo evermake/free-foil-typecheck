@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -301,26 +302,9 @@ generalize = go Foil.emptyScope
 -- addSubst identitySubst binder ... :: Substitution e l0 VoidS
 
 specialize :: Type' -> TypeCheck n Type'
-specialize typ = do
-  TypingContext constraints substs ctx freshId levelsMap level <- get
-
-  -- TODO: Refactor this code to use `freshTypeVar` operation.
-  -- For each new unification variable assign a current `level` in `levelsMap`,
-  -- i.e. for each variable with identifier between `freshId` and `newFreshId`.
-  let (specializedType, newFreshId) = go typ freshId
-  newLevelsMap <-
-    foldM
-      ( \acc ident -> do
-          return (HashMap.insert (makeIdent ident) level acc)
-      )
-      levelsMap
-      [freshId + 1 .. newFreshId - 1]
-
-  put (TypingContext constraints substs ctx newFreshId newLevelsMap level)
-  return specializedType
-  where
-    go :: Type' -> Int -> (Type', Int)
-    go (TForAll (FoilTPatternVar binder) typ') freshId =
-      let subst = Foil.addSubst Foil.identitySubst binder (TUVar (makeIdent freshId))
-       in go (FreeFoil.substitute Foil.emptyScope subst typ') (freshId + 1)
-    go typ' freshId = (typ', freshId)
+specialize = \case
+  TForAll (FoilTPatternVar binder) typ' -> do
+    x <- freshTypeVar
+    let subst = Foil.addSubst Foil.identitySubst binder (TUVar x)
+    specialize (FreeFoil.substitute Foil.emptyScope subst typ')
+  typ' -> return typ'
