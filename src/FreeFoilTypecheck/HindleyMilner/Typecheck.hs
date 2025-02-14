@@ -124,11 +124,10 @@ applySubstToType subst (FreeFoil.Node node) =
           FreeFoil.ScopedAST binder (applySubstToType (fmap Foil.sink subst') body)
 
 applySubstsToType :: [USubst'] -> Type' -> Type'
-applySubstsToType [] typ = typ
-applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType subst typ)
+applySubstsToType substs typ = foldl (flip applySubstToType) typ substs
 
 applySubstsInSubsts :: [USubst'] -> USubst' -> USubst'
-applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
+applySubstsInSubsts substs (l, r) = (l, applySubstsToType substs r)
 
 deriving instance Functor (Foil.NameMap n)
 
@@ -198,7 +197,7 @@ reconstructType (ELet eWhat (FoilPatternVar x) eExpr) = do
   let whatTyp1 = applySubstsToType substs whatTyp
   let ctx' = fmap (applySubstsToType substs) ctx
   let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
-  let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
+  let whatFreeIdents = filter (`notElem` ctxVars) (allUVarsOfType whatTyp1)
   let whatTyp2 = generalize whatFreeIdents whatTyp1
   enterScope x whatTyp2 (reconstructType eExpr)
 reconstructType (EAdd lhs rhs) = do
@@ -257,7 +256,7 @@ unificationVarIdentsBetween :: Int -> Int -> [Raw.UVarIdent]
 unificationVarIdentsBetween a b = map makeIdent [a .. (b - 1)]
 
 makeIdent :: Int -> Raw.UVarIdent
-makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
+makeIdent i = Raw.UVarIdent ("?u" ++ show i)
 
 -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
 -- forall x0 . (forall x1 . x0 -> x1 -> x0)
