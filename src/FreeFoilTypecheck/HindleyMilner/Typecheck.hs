@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -21,6 +22,7 @@ import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifunctor
 import Data.Bifoldable
+import Data.Bitraversable
 import qualified Data.Foldable as F
 import qualified Data.IntMap as IntMap
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
@@ -54,7 +56,18 @@ type USubst' = USubst Foil.VoidS
 data TypeScheme ty where
   TypeScheme :: Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
 
-data HMType ty = MonoType (ty Foil.VoidS) | PolyType (TypeScheme ty)
+data HMType ty
+  = MonoType (ty Foil.VoidS)
+  | PolyType (TypeScheme ty)
+
+class HasUVars (ty :: Foil.S -> *) where
+  fromUVarIdent :: Raw.UVarIdent -> ty n
+  toUVarIdent :: ty n -> Maybe Raw.UVarIdent
+
+instance HasUVars Type where
+  fromUVarIdent = TUVar
+  toUVarIdent (TUVar x) = Just x
+  toUVarIdent _ = Nothing
 
 class HMTypingSig (ty :: Foil.S -> *) (sig :: * -> * -> *) where
   inferSigHM ::
@@ -103,22 +116,22 @@ instance HMTypingSig (FreeFoil.AST FoilTypePattern TypeSig) ExpSig where
       -- toType `isExpectedToBe` TNat
       -- return bodyType
     EAbsSig ty -> undefined
-    ELetSig eType (xType, bodyType) -> do
-      generalizeHM eType xType
-      return bodyType
+    -- ELetSig eType (xType, bodyType) -> do
+    --   generalizeHM eType xType
+    --   return bodyType
     where
       -- isExpectedToBe :: AlphaEquiv ty => Foil.Scope n -> ty n -> ty n -> Either (TypeError (ty n)) ()
       actual `isExpectedToBe` expected =
         unless (FreeFoil.alphaEquiv Foil.emptyScope actual expected) $
-          Left (TypeErrorUnexpectedType actual expected)
+          failTypeCheck "unexpected type" -- (TypeErrorUnexpectedType actual expected)
 
-unifyHM :: ty Foil.VoidS -> ty Foil.VoidS -> TypeCheck n (ty n)
+unifyHM :: (HasUVars ty) => ty Foil.VoidS -> ty Foil.VoidS -> TypeCheck n (ty n)
 unifyHM typ1 typ2 = do
   (TypingContext constrs substs ctx freshId) <- get
   case (typ1, typ2) of
     -- Case for unification variables
-    (TUVar x, r) -> put (TypingContext (constrs ++ [(x, r)]) substs ctx freshId)
-    (l, TUVar x) -> put (TypingContext (constrs ++ [(x, l)]) substs ctx freshId)
+    (toUVarIdent -> Just x, r) -> put (TypingContext (constrs ++ [(fromUVarIdent x, r)]) substs ctx freshId)
+    (l, TUVar x) -> put (TypingContext (constrs ++ [(TUVar x, l)]) substs ctx freshId)
     -- Case for Free Foil variables (not supported for now)
     (FreeFoil.Var x, FreeFoil.Var y)
       | x == y -> return
@@ -127,11 +140,11 @@ unifyHM typ1 typ2 = do
       -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
       --   = Just (TArrowSig (x1, y1) (x2, y2))
       case FreeFoil.zipMatch l r of
-        Nothing -> Left ("cannot unify " ++ show l ++ show r)
+        Nothing -> failTypeCheck ("cannot unify " ++ show l ++ show r)
         -- `zipMatch` takes out corresponding terms from a node that we need
         --  to unify further.
-        Just lr -> unify (F.toList lr) -- ignores "scopes", only works with "terms"
-    (lhs, rhs) -> Left ("cannot unify " ++ show lhs ++ show rhs)
+        Just lr -> FreeFoil.Node <$> bitraverse (uncurry unifyHM) (uncurry unifyHM) lr -- ignores "scopes", only works with "terms"
+    (lhs, rhs) -> failTypeCheck ("cannot unify " ++ show lhs ++ show rhs)
 
 -- freshHM :: TypeCheck n ty (ty n)
 freshHM :: TypeCheck n Type'
@@ -190,6 +203,9 @@ unifyWith substs constraints = unify (map (applySubstsToConstraint substs) const
 newtype TypeCheck n a = TypeCheck {runTypeCheck :: TypingContext n -> Either String (a, TypingContext n)}
   deriving (Functor)
 
+failTypeCheck :: String -> TypeCheck n a
+failTypeCheck msg = TypeCheck (\_ctx -> Left msg)
+
 -- instance Functor (TypeCheck n) where
 --   fmap f (TypeCheck g) = TypeCheck $ \tc ->
 --     case g tc of
@@ -244,6 +260,13 @@ applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
 deriving instance Functor (Foil.NameMap n)
 
 deriving instance Foldable (Foil.NameMap n)
+
+-- data TypingContext' binder ty sig n = TypingContext
+--   { tcConstraints :: [Constraint' ty],
+--     tcSubsts :: [USubst'' binder ty sig],
+--     tcTypings :: FreeFoil.NameMap n (ty Foil.VoidS),
+--     tcFreshId :: Int
+--   }
 
 data TypingContext n = TypingContext
   { tcConstraints :: [Constraint],

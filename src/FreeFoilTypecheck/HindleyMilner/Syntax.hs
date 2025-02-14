@@ -92,7 +92,7 @@ instance Foil.UnifiablePattern FoilTypePattern where
 
 type Exp n = AST FoilPattern ExpSig n
 
-type Type n = AST FoilTypePattern TypeSig n
+type Type = AST FoilTypePattern TypeSig
 
 type Type' = Type Foil.VoidS
 
