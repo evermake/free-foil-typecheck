@@ -207,18 +207,19 @@ reconstructType EFalse = return TBool
 reconstructType (ENat _) = return TNat -- TypeCheck $ \tc -> Right (TNat, tc)
 reconstructType (FreeFoil.Var x) = do
   TypingContext _ _ ctx _ _ _ <- get
-  specialize (Foil.lookupName x ctx)
+  specializeTypeCheck (Foil.lookupName x ctx)
 reconstructType (ELet eWhat (FoilPatternVar x) eExpr) = do
+  incrLevel
   whatTyp <- reconstructType eWhat
+  decrLevel
   unifyTypeCheck
-  (TypingContext _ substs ctx _ levelsMap level) <- get
-  let whatTyp1 = applySubstsToType substs whatTyp
+  (TypingContext constrs substs ctx freshId levelsMap level) <- get
   let ctx' = fmap (applySubstsToType substs) ctx
-  -- TODO: update generalize to use unification variables based on levels
-  -- let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
-  -- let whatFreeIdents = filter (`notElem` ctxVars) (allUVarsOfType whatTyp1)
-  -- let whatTyp2 = generalize whatFreeIdents whatTyp1
-  enterScope x whatTyp2 (reconstructType eExpr)
+  put (TypingContext constrs substs ctx' freshId levelsMap level)
+  let whatTyp' = applySubstsToType substs whatTyp
+  whatTypGeneral <- generalizeTypeCheck whatTyp'
+  enterScope x whatTypGeneral $
+    reconstructType eExpr
 reconstructType (EAdd lhs rhs) = do
   lhsTyp <- reconstructType lhs
   rhsTyp <- reconstructType rhs
@@ -282,29 +283,27 @@ generalize :: [Raw.UVarIdent] -> Type' -> Type'
 generalize = go Foil.emptyScope
   where
     go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> Type n -> Type n
-    go _ [] type_ = type_
-    go ctx (x : xs) type_ = Foil.withFresh ctx $ \binder ->
+    go _ [] t = t
+    go ctx (x : xs) t = Foil.withFresh ctx $ \binder ->
       let newScope = Foil.extendScope binder ctx
           x' = FreeFoil.Var (Foil.nameOf binder)
-          type' = applySubstToType (x, x') (Foil.sink type_)
-       in TForAll (FoilTPatternVar binder) (go newScope xs type')
+          t' = applySubstToType (x, x') (Foil.sink t)
+       in TForAll (FoilTPatternVar binder) (go newScope xs t')
 
--- addSubst
---   :: forall e i o i'. Substitution e i o
---   -> NameBinder i i'
---   -> e o
---   -> Substitution e i' o
+-- TODO: AST is updated by calling the `applySubstToType` for each unification
+--       variable to be generalized. It would be better to update the AST
+--       in one go.
+generalizeTypeCheck :: Type' -> TypeCheck n Type'
+generalizeTypeCheck typ = do
+  (TypingContext _ _ _ _ levelsMap level) <- get
+  let toQuantify = filter (\ident -> maybe True (> level) (HashMap.lookup ident levelsMap)) (allUVarsOfType typ)
+  let generalized = generalize toQuantify typ
+  return generalized
 
--- binder :: NameBinder VoidS l0
-
--- addSubst identitySubst :: NameBinder io i' -> e io -> Substitution e i' io
--- addSubst identitySubst binder :: e VoidS -> Substitution e l0 VoidS
--- addSubst identitySubst binder ... :: Substitution e l0 VoidS
-
-specialize :: Type' -> TypeCheck n Type'
-specialize = \case
+specializeTypeCheck :: Type' -> TypeCheck n Type'
+specializeTypeCheck = \case
   TForAll (FoilTPatternVar binder) typ' -> do
     x <- freshTypeVar
     let subst = Foil.addSubst Foil.identitySubst binder x
-    specialize (FreeFoil.substitute Foil.emptyScope subst typ')
+    specializeTypeCheck (FreeFoil.substitute Foil.emptyScope subst typ')
   typ' -> return typ'
