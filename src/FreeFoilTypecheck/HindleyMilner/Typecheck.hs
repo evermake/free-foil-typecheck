@@ -7,7 +7,6 @@
 
 module FreeFoilTypecheck.HindleyMilner.Typecheck where
 
--- import Control.Applicative (Const)
 import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil as FreeFoil
@@ -261,9 +260,9 @@ makeIdent :: Int -> Raw.UVarIdent
 makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 
 -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
--- forall x0 . forall x1 . x0 -> x1 -> x0
+-- forall x0 . (forall x1 . x0 -> x1 -> x0)
 -- >>> generalize ["?b", "?a"] "?a -> ?b -> ?a"
--- forall x0 . forall x1 . x1 -> x0 -> x1
+-- forall x0 . (forall x1 . x1 -> x0 -> x1)
 generalize :: [Raw.UVarIdent] -> Type' -> Type'
 generalize = go Foil.emptyScope
   where
@@ -287,7 +286,7 @@ generalize = go Foil.emptyScope
 -- addSubst identitySubst binder :: e VoidS -> Substitution e l0 VoidS
 -- addSubst identitySubst binder ... :: Substitution e l0 VoidS
 
--- >>> specialize "forall a. forall b. a -> b" 6
+-- >>> specialize "forall a. (forall b. a -> b)" 6
 -- (?u6 -> ?u7,8)
 specialize :: Type' -> Int -> (Type', Int)
 specialize (TForAll (FoilTPatternVar binder) type_) freshId =
