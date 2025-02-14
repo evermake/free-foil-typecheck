@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE KindSignatures          #-}
+{-# LANGUAGE MultiParamTypeClasses          #-}
 {-# LANGUAGE GADTs          #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE LambdaCase         #-}
@@ -8,6 +10,8 @@
 module FreeFoilTypecheck.SystemF.Typecheck where
 
 import Data.Bifunctor (Bifunctor)
+import Control.Monad (unless)
+import Data.Kind (Type)
 import qualified Control.Monad.Foil          as Foil
 import qualified Control.Monad.Foil.Relative as Foil
 import qualified Control.Monad.Foil.Internal as Foil
@@ -37,7 +41,7 @@ typecheckClosed
   -> Either String (Term Foil.VoidS) {- type -}
 typecheckClosed = typecheck Foil.emptyNameMap
 
-data Scoped binder t n where
+data Scoped binder (t :: Foil.S -> Type) (n :: Foil.S) where
   Scoped :: binder n l -> t l -> Scoped binder t n
 
 data TypeError ty
@@ -57,7 +61,7 @@ class AlphaEquiv t where
   alphaEquiv :: (Foil.Distinct n) => Foil.Scope n -> t n -> t n -> Bool
 
 instance
-  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig) =>
+  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig, Foil.UnifiablePattern binder) =>
   AlphaEquiv (FreeFoil.AST binder sig)
   where
   alphaEquiv = FreeFoil.alphaEquiv
