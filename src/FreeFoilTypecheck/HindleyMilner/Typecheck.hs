@@ -3,17 +3,24 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE GADTSyntax  #-}
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE FlexibleInstances  #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
 module FreeFoilTypecheck.HindleyMilner.Typecheck where
 
 -- import Control.Applicative (Const)
-import Control.Monad (ap)
+import Control.Monad (ap, unless)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil as FreeFoil
 import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifunctor
+import Data.Bifoldable
 import qualified Data.Foldable as F
 import qualified Data.IntMap as IntMap
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
@@ -42,6 +49,109 @@ type USubst n = (Raw.UVarIdent, Type n)
 
 type USubst' = USubst Foil.VoidS
 
+-- ∀ x₁ x₂ … xₙ. T
+-- Type scheme (a.k.a. polytype).
+data TypeScheme ty where
+  TypeScheme :: Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
+
+data HMType ty = MonoType (ty Foil.VoidS) | PolyType (TypeScheme ty)
+
+class HMTypingSig (ty :: Foil.S -> *) (sig :: * -> * -> *) where
+  inferSigHM ::
+    sig (HMType ty, ty Foil.VoidS) (ty Foil.VoidS) -> -- expr node
+    TypeCheck n (ty Foil.VoidS) -- typecheck result
+
+class AlphaEquiv t where
+  alphaEquiv :: (Foil.Distinct n) => Foil.Scope n -> t n -> t n -> Bool
+
+instance
+  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig) =>
+  AlphaEquiv (FreeFoil.AST FoilTypePattern sig)
+  where
+  alphaEquiv = FreeFoil.alphaEquiv
+
+instance HMTypingSig (FreeFoil.AST FoilTypePattern TypeSig) ExpSig where
+  inferSigHM = \case
+    ETrueSig -> return TBool
+    EFalseSig -> return TBool
+    ESubSig l r -> do
+      l `isExpectedToBe` TNat
+      r `isExpectedToBe` TNat
+      return TNat
+    EAddSig l r -> do
+      unifyHM l TNat
+      unifyHM r TNat
+      return TNat
+    EIfSig condType thenType elseType -> do
+      condType `isExpectedToBe` TBool
+      thenType `isExpectedToBe` elseType
+      return thenType
+    EIsZeroSig argType -> do
+      argType `isExpectedToBe` TNat
+      return TBool
+    EAppSig funType argType -> do
+      retType <- freshHM
+      unifyHM funType (TArrow argType retType)
+      return retType
+    ETypedSig ty smth -> do
+      return ty
+    ENatSig smth -> do
+      return TNat
+    EForSig fromType toType bodyType -> undefined
+      -- do
+      -- fromType `isExpectedToBe` TNat
+      -- toType `isExpectedToBe` TNat
+      -- return bodyType
+    EAbsSig ty -> undefined
+    ELetSig eType (xType, bodyType) -> do
+      generalizeHM eType xType
+      return bodyType
+    where
+      -- isExpectedToBe :: AlphaEquiv ty => Foil.Scope n -> ty n -> ty n -> Either (TypeError (ty n)) ()
+      actual `isExpectedToBe` expected =
+        unless (FreeFoil.alphaEquiv Foil.emptyScope actual expected) $
+          Left (TypeErrorUnexpectedType actual expected)
+
+unifyHM :: ty Foil.VoidS -> ty Foil.VoidS -> TypeCheck n (ty n)
+unifyHM typ1 typ2 = do
+  (TypingContext constrs substs ctx freshId) <- get
+  case (typ1, typ2) of
+    -- Case for unification variables
+    (TUVar x, r) -> put (TypingContext (constrs ++ [(x, r)]) substs ctx freshId)
+    (l, TUVar x) -> put (TypingContext (constrs ++ [(x, l)]) substs ctx freshId)
+    -- Case for Free Foil variables (not supported for now)
+    (FreeFoil.Var x, FreeFoil.Var y)
+      | x == y -> return
+    -- Case of non-trivial arbitrary nodes
+    (FreeFoil.Node l, FreeFoil.Node r) ->
+      -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
+      --   = Just (TArrowSig (x1, y1) (x2, y2))
+      case FreeFoil.zipMatch l r of
+        Nothing -> Left ("cannot unify " ++ show l ++ show r)
+        -- `zipMatch` takes out corresponding terms from a node that we need
+        --  to unify further.
+        Just lr -> unify (F.toList lr) -- ignores "scopes", only works with "terms"
+    (lhs, rhs) -> Left ("cannot unify " ++ show lhs ++ show rhs)
+
+-- freshHM :: TypeCheck n ty (ty n)
+freshHM :: TypeCheck n Type'
+freshHM = do
+  TypingContext constraints substs ctx freshId <- get
+  put (TypingContext constraints substs ctx (freshId + 1))
+  return (TUVar (makeIdent freshId))
+
+generalizeHM :: ty n -> HMType ty -> TypeCheck n (ty Foil.VoidS)
+generalizeHM whatTyp xTyp = do
+  (TypingContext _ substs ctx _) <- get
+  let whatTyp1 = applySubstsToType substs whatTyp
+  let ctx' = fmap (applySubstsToType substs) ctx
+  let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
+  let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
+  let whatTyp2 = generalize whatFreeIdents whatTyp1
+  enterScope xTyp TypeScheme(whatFreeIdents, whatTyp2) (reconstructType eExpr) -- xTyp is not binder but type
+
+
+
 unify1 :: Constraint -> Either String [USubst']
 unify1 c =
   case c of
@@ -56,7 +166,7 @@ unify1 c =
       -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
       --   = Just (TArrowSig (x1, y1) (x2, y2))
       case FreeFoil.zipMatch l r of
-        Nothing -> Left ("cannot unify " ++ show c)
+        Nothing -> Left ("cannot unify " ++ show l ++ show r)
         -- `zipMatch` takes out corresponding terms from a node that we need
         --  to unify further.
         Just lr -> unify (F.toList lr) -- ignores "scopes", only works with "terms"
