@@ -296,7 +296,13 @@ generalize = go Foil.emptyScope
 generalizeTypeCheck :: Type' -> TypeCheck n Type'
 generalizeTypeCheck typ = do
   (TypingContext _ _ _ _ levelsMap level) <- get
-  let toQuantify = filter (\ident -> maybe True (> level) (HashMap.lookup ident levelsMap)) (allUVarsOfType typ)
+  let toQuantify =
+        filter
+          ( \ident -> case HashMap.lookup ident levelsMap of
+              Nothing -> error $ "Unification variable " ++ show ident ++ " not found in levels map"
+              Just l -> l > level
+          )
+          (allUVarsOfType typ)
   let generalized = generalize toQuantify typ
   return generalized
 
