@@ -38,7 +38,7 @@ instance Data.Hashable.Hashable Raw.UVarIdent where
 inferTypeNewClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeNewClosed expr = do
   (type', TypingContext constrs substs _ _ _ _) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0 HashMap.empty 1)
-  substs' <- unify (map (applySubstsToConstraint substs) constrs)
+  substs' <- unifyWith substs constrs
   return (applySubstsToType substs' type')
 
 type Constraint = (Type', Type')
@@ -76,7 +76,7 @@ unify :: [Constraint] -> Either String [USubst']
 unify [] = return []
 unify (c : cs) = do
   substs <- unify1 c
-  substs' <- unify (map (applySubstsToConstraint substs) cs)
+  substs' <- unifyWith substs cs
   return (substs +++ substs')
 
 unifyWith :: [USubst'] -> [Constraint] -> Either String [USubst']
