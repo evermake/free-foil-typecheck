@@ -55,7 +55,7 @@ unify1 c =
     (l, TUVar x) -> return [(x, l)]
     -- Case for Free Foil variables (not supported for now)
     (FreeFoil.Var x, FreeFoil.Var y)
-      | x == y -> return []
+      | x == y -> Left "unification of bound variables is not supported"
     -- Case of non-trivial arbitrary nodes
     (FreeFoil.Node l, FreeFoil.Node r) ->
       -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
