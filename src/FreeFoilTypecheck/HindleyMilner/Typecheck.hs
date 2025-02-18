@@ -47,6 +47,8 @@ type USubst n = (Raw.UVarIdent, Type n)
 
 type USubst' = USubst Foil.VoidS
 
+type IdentLevelMap = HashMap.HashMap Raw.UVarIdent Int
+
 unify1 :: Constraint -> Either String [USubst']
 unify1 c =
   case c of
@@ -144,7 +146,7 @@ data TypingContext n = TypingContext
     tcSubsts :: [USubst'],
     tcTypings :: FreeFoil.NameMap n Type',
     tcFreshId :: Int,
-    tcLevels :: HashMap.HashMap Raw.UVarIdent Int,
+    tcLevels :: IdentLevelMap,
     tcLevel :: Int
   }
 
@@ -303,8 +305,7 @@ generalizeTypeCheck typ = do
               Just l -> l > level
           )
           (allUVarsOfType typ)
-  let generalized = generalize toQuantify typ
-  return generalized
+  return $ generalize toQuantify typ
 
 specializeTypeCheck :: Type' -> TypeCheck n Type'
 specializeTypeCheck = \case
