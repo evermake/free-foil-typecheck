@@ -1,12 +1,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module FreeFoilTypecheck.SystemF.Typecheck where
 
@@ -17,6 +19,7 @@ import qualified Control.Monad.Foil.Relative as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifoldable (Bifoldable (bifoldMap))
 import Data.Bifunctor (Bifunctor)
+import Data.Bitraversable
 import qualified Data.IntMap as IntMap
 import Data.Kind (Type)
 import Data.Maybe (mapMaybe)
@@ -67,26 +70,25 @@ instance
   where
   alphaEquiv = FreeFoil.alphaEquiv
 
-class (AlphaEquiv ty) => TypingSig binder ty sig where
+class (forall n. Show (TypeError (ty n)), AlphaEquiv ty) => TypingSig binder ty sig where
   checkSig ::
     (Foil.Distinct n) =>
     Context' ty n -> -- context
     sig (Scoped binder ty n) (ty n) -> -- expr node
     ty n -> -- type
-    Either (TypeError (ty n)) () -- type
+    Either String () -- type
   checkSig ctx node expectedType = do
     inferredType <- inferSig ctx node
     unless (alphaEquiv (nameMapToScope ctx) inferredType expectedType) $
-      Left (TypeErrorUnexpectedType inferredType expectedType)
+      Left (show (TypeErrorUnexpectedType inferredType expectedType))
   inferSig ::
     (Foil.Distinct n) =>
     Context' ty n -> -- context
     sig (Scoped binder ty n) (ty n) -> -- expr node
-    Either (TypeError (ty n)) (ty n) -- type
-
+    Either String (ty n) -- type
 
 bidirectionalCheck ::
-  (Foil.Distinct n, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   ty n {- type -} ->
@@ -95,23 +97,31 @@ bidirectionalCheck scope t@(FreeFoil.Var n) expectedType = do
   inferredType <- bidirectionalInfer scope t
   (scope, inferredType) `shouldBe` expectedType
   return expectedType
+
 -- bidirectionalCheck scope t@(FreeFoil.Node node) expectedType =
 -- node :: ??
 -- TODO: typecheck node using TypingSig
 
 bidirectionalInfer ::
-  (Foil.Distinct n, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   Either String (ty n)
 bidirectionalInfer scope (FreeFoil.Var n) =
   return (Foil.lookupName n scope)
-
 bidirectionalInfer scope _t@(FreeFoil.Node node :: FreeFoil.AST binder sig n) = do
-  inferSig scope node
+  node' <- bitraverse (bidirectionalInferScoped scope) (bidirectionalInfer scope) node
+  inferSig scope node'
+
+bidirectionalInferScoped ::
+  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  Context' ty n ->
+  FreeFoil.ScopedAST binder sig n {- exp -} ->
+  Either String (Scoped binder ty n)
+bidirectionalInferScoped = _
 
 typecheck' ::
-  (Foil.Distinct n, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   ty n {- type -} ->
