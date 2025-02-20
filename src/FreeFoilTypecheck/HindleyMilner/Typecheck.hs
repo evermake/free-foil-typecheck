@@ -70,8 +70,8 @@ instance Monad (TypeCheck n) where
 -- Right Nat
 inferTypeNewClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeNewClosed expr = do
-  (type', TypingContext constrs substs _ _ _ _) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0 HashMap.empty 1)
-  substs' <- unifyWith substs constrs
+  (type', TypingContext constrs substs _ _ levelsMap _) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0 HashMap.empty 1)
+  (substs', _) <- unifyWith levelsMap substs constrs
   return (applySubstsToType substs' type')
 
 infixr 6 +++
@@ -170,8 +170,8 @@ eitherToTypeCheck (Right x) = TypeCheck $ \tc -> Right (x, tc)
 unifyTypeCheck :: TypeCheck n ()
 unifyTypeCheck = do
   TypingContext constraints substs ctx freshId levelsMap level <- get
-  substs' <- eitherToTypeCheck (unifyWith substs constraints)
-  put (TypingContext [] (substs +++ substs') ctx freshId levelsMap level)
+  (substs', newLevelsMap) <- eitherToTypeCheck (unifyWith levelsMap substs constraints)
+  put (TypingContext [] (substs +++ substs') ctx freshId newLevelsMap level)
 
 enterScope :: Foil.NameBinder n l -> Type' -> TypeCheck l a -> TypeCheck n a
 enterScope binder type_ code = do
@@ -222,19 +222,21 @@ specializeTypeCheck = \case
 
 -- ** Unification
 
-unify :: [Constraint] -> Either String [USubst']
-unify [] = return []
-unify (c : cs) = do
-  substs <- unify1 c
-  substs' <- unifyWith substs cs
-  return (substs +++ substs')
+unify :: IdentLevelMap -> [Constraint] -> Either String ([USubst'], IdentLevelMap)
+unify levelsMap [] = return ([], levelsMap)
+unify levelsMap (c : cs) = do
+  (substs, newMap) <- unify1 levelsMap c
+  (substs', newMap') <- unify newMap cs
+  return (substs +++ substs', newMap')
 
-unify1 :: Constraint -> Either String [USubst']
-unify1 c =
+unify1 :: IdentLevelMap -> Constraint -> Either String ([USubst'], IdentLevelMap)
+unify1 levelsMap c =
   case c of
     -- Case for unification variables
-    (TUVar x, r) -> return [(x, r)]
-    (l, TUVar x) -> return [(x, l)]
+    (TUVar x, r) -> case r of
+      (TUVar y) -> if x == y then Right ([], levelsMap) else unifyUVar x r
+      _ -> unifyUVar x r
+    (l, TUVar x) -> unifyUVar x l
     -- Case for Free Foil variables (not supported for now)
     (FreeFoil.Var x, FreeFoil.Var y)
       | x == y -> Left "unification of bound variables is not supported"
@@ -246,11 +248,32 @@ unify1 c =
         Nothing -> Left ("cannot unify " ++ show c)
         -- `zipMatch` takes out corresponding terms from a node that we need
         --  to unify further.
-        Just lr -> unify (F.toList lr) -- ignores "scopes", only works with "terms"
+        Just lr -> unify levelsMap (F.toList lr) -- ignores "scopes", only works with "terms"
     (lhs, rhs) -> Left ("cannot unify " ++ show lhs ++ show rhs)
+  where
+    unifyUVar :: Raw.UVarIdent -> Type' -> Either String ([USubst'], IdentLevelMap)
+    unifyUVar x typ =
+      if checkOccurs x typ
+        then Left "occurs check failed"
+        else
+          let allTypVars = allUVarsOfType typ
+           in let updatedLevelsMap = case HashMap.lookup x levelsMap of
+                    Nothing -> Left "unification variable not found in levels map"
+                    Just xLevel ->
+                      foldl
+                        ( \acc ident -> case (acc, HashMap.lookup ident levelsMap) of
+                            (Left err, _) -> Left err
+                            (_, Nothing) -> Left "unification variable not found in levels map"
+                            (Right m, Just level) -> Right $ HashMap.insert ident (min xLevel level) m
+                        )
+                        (Right levelsMap)
+                        allTypVars
+               in case updatedLevelsMap of
+                    Left err -> Left err
+                    Right newLevelsMap -> Right ([(x, typ)], newLevelsMap)
 
-unifyWith :: [USubst'] -> [Constraint] -> Either String [USubst']
-unifyWith substs constraints = unify (map (applySubstsToConstraint substs) constraints)
+unifyWith :: IdentLevelMap -> [USubst'] -> [Constraint] -> Either String ([USubst'], IdentLevelMap)
+unifyWith levelsMap substs constraints = unify levelsMap (map (applySubstsToConstraint substs) constraints)
 
 applySubstsToConstraint :: [USubst'] -> Constraint -> Constraint
 applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
@@ -287,6 +310,31 @@ popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (
 
 makeIdent :: Int -> Raw.UVarIdent
 makeIdent i = Raw.UVarIdent ("?u" ++ show i)
+
+-- | Checks whether a unification variable with the given `ident` occurs in `typ`.
+-- TODO: Generalize implementation using free-foil.
+checkOccurs :: Raw.UVarIdent -> Type' -> Bool
+checkOccurs ident (TUVar ident2) = ident == ident2
+checkOccurs ident (TArrow argTyp retTyp) = checkOccurs ident argTyp || checkOccurs ident retTyp
+checkOccurs _ (FreeFoil.Var _) = error "checkOccurs is not supported for bound variables"
+checkOccurs _ TBool = False
+checkOccurs _ TNat = False
+checkOccurs _ (TForAll _ _) = error "checkOccurs is not supported for forall"
+
+minUVarLevelOf :: IdentLevelMap -> Type' -> Maybe Int
+minUVarLevelOf levelsMap = \case
+  TUVar ident -> HashMap.lookup ident levelsMap
+  FreeFoil.Var _ -> error "minUVarLevelOf is not supported for bound variables"
+  FreeFoil.Node node ->
+    foldl
+      ( \acc typ ->
+          case (acc, minUVarLevelOf levelsMap typ) of
+            (Nothing, level) -> level
+            (level, Nothing) -> level
+            (Just l1, Just l2) -> Just (min l1 l2)
+      )
+      Nothing
+      node
 
 -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
 -- forall x0 . (forall x1 . x0 -> x1 -> x0)
