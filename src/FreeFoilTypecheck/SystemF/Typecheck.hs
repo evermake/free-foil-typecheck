@@ -23,7 +23,6 @@ import Data.Bitraversable
 import qualified Data.IntMap as IntMap
 import Data.Kind (Type)
 import Data.Maybe (mapMaybe)
-import qualified FreeFoilTypecheck.SystemF.Parser.Print as Raw
 import FreeFoilTypecheck.SystemF.Syntax
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -93,7 +92,7 @@ bidirectionalCheck ::
   FreeFoil.AST binder sig n {- exp -} ->
   ty n {- type -} ->
   Either String (ty n)
-bidirectionalCheck scope t@(FreeFoil.Var n) expectedType = do
+bidirectionalCheck scope t expectedType = do
   inferredType <- bidirectionalInfer scope t
   (scope, inferredType) `shouldBe` expectedType
   return expectedType
