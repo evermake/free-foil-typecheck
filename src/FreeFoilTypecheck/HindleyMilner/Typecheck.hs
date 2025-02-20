@@ -13,6 +13,7 @@ import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil as FreeFoil
 import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
+import qualified Data.Bifoldable
 import Data.Bifunctor
 import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as HashMap
@@ -234,7 +235,9 @@ unify1 levelsMap c =
   case c of
     -- Case for unification variables
     (TUVar x, r) -> case r of
-      (TUVar y) -> if x == y then Right ([], levelsMap) else unifyUVar x r
+      TUVar y
+        | x == y -> Right ([], levelsMap)
+        | otherwise -> unifyUVar x r
       _ -> unifyUVar x r
     (l, TUVar x) -> unifyUVar x l
     -- Case for Free Foil variables (not supported for now)
@@ -260,26 +263,12 @@ unify1 levelsMap c =
            in let updatedLevelsMap = case HashMap.lookup x levelsMap of
                     Nothing -> Left "unification variable not found in levels map"
                     Just xLevel ->
-                      -- для каждой переменной в allTypVars
-                      -- установить уровень = минимум из текущего уровня и уровня x
-                      -- Right $
-                      --   HashMap.mapWithKey
-                      --     (\var level -> if var `elem` allTypVars then min xLevel level else level)
-                      --     levelsMap
                       Right $
                         HashMap.unionWith
                           min
                           levelsMap
                           (HashMap.fromList [(var, xLevel) | var <- allTypVars])
-               in -- foldl
-                  --   ( \acc ident -> case (acc, HashMap.lookup ident levelsMap) of
-                  --       (Left err, _) -> Left err
-                  --       (_, Nothing) -> Left "unification variable not found in levels map"
-                  --       (Right m, Just level) -> Right $ HashMap.insert ident (min xLevel level) m
-                  --   )
-                  --   (Right levelsMap)
-                  --   allTypVars
-                  case updatedLevelsMap of
+               in case updatedLevelsMap of
                     Left err -> Left err
                     Right newLevelsMap -> Right ([(x, typ)], newLevelsMap)
 
@@ -323,29 +312,29 @@ makeIdent :: Int -> Raw.UVarIdent
 makeIdent i = Raw.UVarIdent ("?u" ++ show i)
 
 -- | Checks whether a unification variable with the given `ident` occurs in `typ`.
--- TODO: Generalize implementation using free-foil.
-checkOccurs :: Raw.UVarIdent -> Type' -> Bool
-checkOccurs ident (TUVar ident2) = ident == ident2
-checkOccurs ident (TArrow argTyp retTyp) = checkOccurs ident argTyp || checkOccurs ident retTyp
-checkOccurs _ (FreeFoil.Var _) = error "checkOccurs is not supported for bound variables"
-checkOccurs _ TBool = False
-checkOccurs _ TNat = False
-checkOccurs _ (TForAll _ _) = error "checkOccurs is not supported for forall"
+checkOccurs :: Raw.UVarIdent -> Type n -> Bool
+checkOccurs ident (TUVar other) = ident == other
+checkOccurs _ (FreeFoil.Var _) = False
+checkOccurs ident (FreeFoil.Node node) =
+  Data.Bifoldable.bior (bimap (checkOccursScoped ident) (checkOccurs ident) node)
 
-minUVarLevelOf :: IdentLevelMap -> Type' -> Maybe Int
-minUVarLevelOf levelsMap = \case
-  TUVar ident -> HashMap.lookup ident levelsMap
-  FreeFoil.Var _ -> error "minUVarLevelOf is not supported for bound variables"
-  FreeFoil.Node node ->
-    foldl
-      ( \acc typ ->
-          case (acc, minUVarLevelOf levelsMap typ) of
-            (Nothing, level) -> level
-            (level, Nothing) -> level
-            (Just l1, Just l2) -> Just (min l1 l2)
-      )
-      Nothing
-      node
+checkOccursScoped :: Raw.UVarIdent -> FreeFoil.ScopedAST FoilTypePattern TypeSig n -> Bool
+checkOccursScoped ident (FreeFoil.ScopedAST _binder body) = checkOccurs ident body
+
+-- | Returns the minimum level of all unification variables in the given type.
+minUVarLevelOf :: IdentLevelMap -> Type n -> Maybe Int
+minUVarLevelOf levelsMap (TUVar ident) = HashMap.lookup ident levelsMap
+minUVarLevelOf _ (FreeFoil.Var _) = Nothing
+minUVarLevelOf levelsMap (FreeFoil.Node node) =
+  maybeMin $ Data.Bifoldable.biList $ bimap (minUVarLevelOfScoped levelsMap) (minUVarLevelOf levelsMap) node
+  where
+    maybeMin :: [Maybe Int] -> Maybe Int
+    maybeMin [] = Nothing
+    maybeMin [x] = x
+    maybeMin (x : xs) = min x (maybeMin xs)
+
+minUVarLevelOfScoped :: IdentLevelMap -> FreeFoil.ScopedAST FoilTypePattern TypeSig n -> Maybe Int
+minUVarLevelOfScoped levelsMap (FreeFoil.ScopedAST _binder body) = minUVarLevelOf levelsMap body
 
 -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
 -- forall x0 . (forall x1 . x0 -> x1 -> x0)
