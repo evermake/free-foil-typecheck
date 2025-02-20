@@ -260,15 +260,26 @@ unify1 levelsMap c =
            in let updatedLevelsMap = case HashMap.lookup x levelsMap of
                     Nothing -> Left "unification variable not found in levels map"
                     Just xLevel ->
-                      foldl
-                        ( \acc ident -> case (acc, HashMap.lookup ident levelsMap) of
-                            (Left err, _) -> Left err
-                            (_, Nothing) -> Left "unification variable not found in levels map"
-                            (Right m, Just level) -> Right $ HashMap.insert ident (min xLevel level) m
-                        )
-                        (Right levelsMap)
-                        allTypVars
-               in case updatedLevelsMap of
+                      -- для каждой переменной в allTypVars
+                      -- установить уровень = минимум из текущего уровня и уровня x
+                      -- Right $
+                      --   HashMap.mapWithKey
+                      --     (\var level -> if var `elem` allTypVars then min xLevel level else level)
+                      --     levelsMap
+                      Right $
+                        HashMap.unionWith
+                          min
+                          levelsMap
+                          (HashMap.fromList [(var, xLevel) | var <- allTypVars])
+               in -- foldl
+                  --   ( \acc ident -> case (acc, HashMap.lookup ident levelsMap) of
+                  --       (Left err, _) -> Left err
+                  --       (_, Nothing) -> Left "unification variable not found in levels map"
+                  --       (Right m, Just level) -> Right $ HashMap.insert ident (min xLevel level) m
+                  --   )
+                  --   (Right levelsMap)
+                  --   allTypVars
+                  case updatedLevelsMap of
                     Left err -> Left err
                     Right newLevelsMap -> Right ([(x, typ)], newLevelsMap)
 
