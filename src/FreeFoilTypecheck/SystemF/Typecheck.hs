@@ -89,6 +89,8 @@ class
     sig (Scoped binder ty n) (ty n) -> -- expr node
     Either String (ty n) -- type
 
+-- instance TypingSig binder TermSig TypeSig where -- what types to implement
+
 bidirectionalCheck ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
