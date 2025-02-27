@@ -1,6 +1,7 @@
 token UVarIdent ('?' letter (letter | digit | '_')*) ; ;
 
 PatternVar. Pattern ::= Ident ;
+- PatternAsc. Pattern ::= Pattern ":" Term ;
 
 EVar.        Term3 ::= Ident ;
 ETrue.       Term3 ::= "true" ;

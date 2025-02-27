@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
@@ -8,6 +9,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module FreeFoilTypecheck.SystemF.Typecheck where
@@ -69,14 +71,32 @@ instance
   where
   alphaEquiv = FreeFoil.alphaEquiv
 
+data CheckInfer ty (n :: Foil.S) = CheckInfer
+  { check :: ty n -> Either String (),
+    infer :: Either String (ty n)
+  }
+
+type ScopedCheckInfer binder ty n =
+  CheckInfer (Scoped binder ty) n
+
 class
   (forall n. Show (TypeError (ty n)), AlphaEquiv ty) =>
   TypingSig binder ty sig
   where
+  -- to check:
+  --  Γ ⊢ t₁ t₂ ⇐ B
+  -- we need to
+  --  infer Γ ⊢ t₁ ⇒ A → B
+  --  check Γ ⊢ t₂ ⇐ A
+
+  -- checkSig scope (EAppSig t1 t2) expectedType = do
+  --   TArrow a b <- infer t1
+  --   check t2 a
+
   checkSig ::
     (Foil.Distinct n) =>
     Context' ty n -> -- context
-    sig (Scoped binder ty n) (ty n) -> -- expr node
+    sig (ScopedCheckInfer binder ty n) (CheckInfer ty n) -> -- expr node
     ty n -> -- type
     Either String () -- type
   checkSig ctx node expectedType = do
@@ -86,57 +106,100 @@ class
   inferSig ::
     (Foil.Distinct n) =>
     Context' ty n -> -- context
-    sig (Scoped binder ty n) (ty n) -> -- expr node
+    sig (ScopedCheckInfer binder ty n) (CheckInfer ty n) -> -- expr node
     Either String (ty n) -- type
 
--- instance TypingSig binder TermSig TypeSig where -- what types to implement
+instance
+  ( forall n. Show (TypeError (FreeFoil.AST binder TermSig n)),
+    Foil.UnifiablePattern binder
+  ) =>
+  TypingSig binder (FreeFoil.AST binder TermSig) TermSig
+  where
+  inferSig scope = \case
+    ETrueSig -> return TBool
+    EAppSig t1 t2 ->
+      infer t1 >>= \case
+        TArrow a b -> do
+          check t2 a
+          return b
+        _ -> Left "not a function"
+
+-- EAbsTypedSig body -> do
+--   (argType, bodyType) <- infer body
+--   return (TArrow argType bodyType)
 
 bidirectionalCheck ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   ty n {- type -} ->
-  Either String (ty n)
+  Either String ()
 bidirectionalCheck scope t expectedType = do
-  inferredType <- bidirectionalInfer scope t
-  (scope, inferredType) `shouldBe` expectedType
-  return expectedType
+  ci <- bidirectionaCheckInfer scope t
+  check ci expectedType
+
+bidirectionalInfer ::
+  (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
+  Context' ty n ->
+  FreeFoil.AST binder sig n {- exp -} ->
+  Either String (ty n)
+bidirectionalInfer scope t = do
+  ci <- bidirectionaCheckInfer scope t
+  infer ci
 
 -- bidirectionalCheck scope t@(FreeFoil.Node node) expectedType =
 -- node :: ??
 -- TODO: typecheck node using TypingSig
 
-bidirectionalInfer ::
+bidirectionaCheckInfer ::
   (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
-  Either String (ty n)
-bidirectionalInfer scope (FreeFoil.Var n) =
-  return (Foil.lookupName n scope)
-bidirectionalInfer scope _t@(FreeFoil.Node node :: FreeFoil.AST binder sig n) = do
-  node' <- bitraverse (bidirectionalInferScoped scope) (bidirectionalInfer scope) node
-  inferSig scope node'
+  Either String (CheckInfer ty n)
+bidirectionaCheckInfer scope (FreeFoil.Var n) = do
+  let inferredType = Foil.lookupName n scope
+  return
+    CheckInfer
+      { infer = return inferredType,
+        check = \expectedType -> do
+          unless (alphaEquiv (nameMapToScope scope) inferredType expectedType) $
+            Left (show (TypeErrorUnexpectedType inferredType expectedType))
+      }
+bidirectionaCheckInfer scope _t@(FreeFoil.Node node :: FreeFoil.AST binder sig n) = do
+  node' <- bitraverse (bidirectionalCheckInferScoped scope) (bidirectionaCheckInfer scope) node
+  return
+    CheckInfer
+      { infer = inferSig scope node',
+        check = checkSig scope node'
+      }
 
-bidirectionalInferScoped ::
+-- Γ, x : A ⊢ t  => B
+-- —————————————————————
+-- Γ  ⊢  λx:A.t  =>  A → B
+bidirectionalCheckInferScoped ::
   (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.ScopedAST binder sig n {- exp -} ->
-  Either String (Scoped binder ty n)
-bidirectionalInferScoped scope (FreeFoil.ScopedAST binder body) = 
+  Either String (ScopedCheckInfer binder ty n)
+bidirectionalCheckInferScoped scope (FreeFoil.ScopedAST binder body) =
   case (Foil.assertExt binder, Foil.assertDistinct binder) of
     (Foil.Ext, Foil.Distinct) -> do
-      case unsinkAST (nameMapToScope scope) body of
-        Nothing -> Left "Failed to unsink body: dependent types"
-        Just body' -> do
-          var <- bidirectionalInfer scope body'
-          return $ Scoped binder (Foil.sink var)
+      return
+        CheckInfer
+          { infer = Left "cannot infer under binder",
+            check = \expectedType -> Left "cannot check under binder"
+          }
+
+-- let scope' = Foil.addNameBinders binder _ (Foil.sink <$> scope)
+-- typeOfBody <- bidirectionalInfer scope' body
+-- return $ Scoped binder typeOfBody
 
 typecheck' ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   ty n {- type -} ->
-  Either String (ty n)
+  Either String ()
 typecheck' = bidirectionalCheck
 
 extendContext :: (Foil.Distinct n) => Foil.NameBinder n l -> Term n -> Context n -> Context l
