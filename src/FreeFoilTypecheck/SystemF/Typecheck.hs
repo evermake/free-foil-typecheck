@@ -69,7 +69,10 @@ instance
   where
   alphaEquiv = FreeFoil.alphaEquiv
 
-class (forall n. Show (TypeError (ty n)), AlphaEquiv ty) => TypingSig binder ty sig where
+class
+  (forall n. Show (TypeError (ty n)), AlphaEquiv ty) =>
+  TypingSig binder ty sig
+  where
   checkSig ::
     (Foil.Distinct n) =>
     Context' ty n -> -- context
@@ -87,7 +90,7 @@ class (forall n. Show (TypeError (ty n)), AlphaEquiv ty) => TypingSig binder ty 
     Either String (ty n) -- type
 
 bidirectionalCheck ::
-  (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   ty n {- type -} ->
@@ -102,7 +105,7 @@ bidirectionalCheck scope t expectedType = do
 -- TODO: typecheck node using TypingSig
 
 bidirectionalInfer ::
-  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   Either String (ty n)
@@ -113,14 +116,21 @@ bidirectionalInfer scope _t@(FreeFoil.Node node :: FreeFoil.AST binder sig n) = 
   inferSig scope node'
 
 bidirectionalInferScoped ::
-  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.ScopedAST binder sig n {- exp -} ->
   Either String (Scoped binder ty n)
-bidirectionalInferScoped = _
+bidirectionalInferScoped scope (FreeFoil.ScopedAST binder body) = 
+  case (Foil.assertExt binder, Foil.assertDistinct binder) of
+    (Foil.Ext, Foil.Distinct) -> do
+      case unsinkAST (nameMapToScope scope) body of
+        Nothing -> Left "Failed to unsink body: dependent types"
+        Just body' -> do
+          var <- bidirectionalInfer scope body'
+          return $ Scoped binder (Foil.sink var)
 
 typecheck' ::
-  (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder) =>
+  (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
   FreeFoil.AST binder sig n {- exp -} ->
   ty n {- type -} ->
