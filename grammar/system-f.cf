@@ -1,7 +1,7 @@
 token UVarIdent ('?' letter (letter | digit | '_')*) ; ;
 
--- PatternVar. Pattern ::= Ident ;
-PatternAsc. Pattern ::= Pattern ":" Term ;
+PatternVar. Pattern ::= Ident ;
+PatternAsc. Pattern ::= Ident ":" Term ;
 
 EVar.        Term3 ::= Ident ;
 ETrue.       Term3 ::= "true" ;
@@ -13,8 +13,7 @@ EIf.         Term1 ::= "if" Term1 "then" Term1 "else" Term1 ;
 EIsZero.     Term2 ::= "iszero" "(" Term ")" ;
 ETyped.      Term  ::= Term1 ":" Term ;
 ELet.        Term1 ::= "let" Pattern "=" Term1 "in" ScopedTerm ;
-EAbsTyped.   Term1 ::= "λ" Pattern ":" Term "." ScopedTerm ;
-EAbsUntyped. Term1 ::= "λ" Pattern "." ScopedTerm ;
+EAbs.        Term1 ::= "λ" Pattern "." ScopedTerm ;
 EApp.        Term1 ::= Term1 Term2 ;
 ETAbs.       Term1 ::= "Λ" Pattern "." ScopedTerm ;
 ETApp.       Term1 ::= Term1 "[" Term "]" ;
