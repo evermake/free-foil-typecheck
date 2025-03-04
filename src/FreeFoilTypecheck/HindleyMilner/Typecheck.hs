@@ -262,7 +262,7 @@ unify :: IdentLevelMap -> [Constraint] -> Either String ([USubst'], IdentLevelMa
 unify levelsMap [] = return ([], levelsMap)
 unify levelsMap (c : cs) = do
   (substs, newMap) <- unify1 levelsMap c
-  (substs', newMap') <- unify newMap cs
+  (substs', newMap') <- unifyWith newMap substs cs
   return (substs +++ substs', newMap')
 
 unify1 :: IdentLevelMap -> Constraint -> Either String ([USubst'], IdentLevelMap)
