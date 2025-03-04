@@ -15,7 +15,7 @@ import qualified Data.String
 import qualified Data.Data    as C (Data, Typeable)
 import qualified GHC.Generics as C (Generic)
 
-data Pattern = PatternVar Ident
+data Pattern = PatternAsc Pattern Term
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data Term
@@ -29,7 +29,7 @@ data Term
     | EIsZero Term
     | ETyped Term Term
     | ELet Pattern Term ScopedTerm
-    | EAbsTyped Pattern Term ScopedTerm
+    | EAbsTyped Pattern ScopedTerm
     | EAbsUntyped Pattern ScopedTerm
     | EApp Term Term
     | ETAbs Pattern ScopedTerm

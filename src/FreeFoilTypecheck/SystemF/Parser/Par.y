@@ -77,7 +77,7 @@ UVarIdent  : L_UVarIdent { FreeFoilTypecheck.SystemF.Parser.Abs.UVarIdent $1 }
 
 Pattern :: { FreeFoilTypecheck.SystemF.Parser.Abs.Pattern }
 Pattern
-  : Ident { FreeFoilTypecheck.SystemF.Parser.Abs.PatternVar $1 }
+  : Pattern ':' Term { FreeFoilTypecheck.SystemF.Parser.Abs.PatternAsc $1 $3 }
 
 Term3 :: { FreeFoilTypecheck.SystemF.Parser.Abs.Term }
 Term3
@@ -103,7 +103,7 @@ Term1 :: { FreeFoilTypecheck.SystemF.Parser.Abs.Term }
 Term1
   : 'if' Term1 'then' Term1 'else' Term1 { FreeFoilTypecheck.SystemF.Parser.Abs.EIf $2 $4 $6 }
   | 'let' Pattern '=' Term1 'in' ScopedTerm { FreeFoilTypecheck.SystemF.Parser.Abs.ELet $2 $4 $6 }
-  | 'λ' Pattern ':' Term '.' ScopedTerm { FreeFoilTypecheck.SystemF.Parser.Abs.EAbsTyped $2 $4 $6 }
+  | 'λ' Pattern '.' ScopedTerm { FreeFoilTypecheck.SystemF.Parser.Abs.EAbsTyped $2 $4 }
   | 'λ' Pattern '.' ScopedTerm { FreeFoilTypecheck.SystemF.Parser.Abs.EAbsUntyped $2 $4 }
   | Term1 Term2 { FreeFoilTypecheck.SystemF.Parser.Abs.EApp $1 $2 }
   | 'Λ' Pattern '.' ScopedTerm { FreeFoilTypecheck.SystemF.Parser.Abs.ETAbs $2 $4 }

@@ -115,7 +115,7 @@ instance
   ) =>
   TypingSig binder (FreeFoil.AST binder TermSig) TermSig
   where
-  inferSig scope = \case
+  inferSig _scope = \case
     ETrueSig -> return TBool
     EAppSig t1 t2 ->
       infer t1 >>= \case
@@ -123,10 +123,10 @@ instance
           check t2 a
           return b
         _ -> Left "not a function"
-
--- EAbsTypedSig body -> do
---   (argType, bodyType) <- infer body
---   return (TArrow argType bodyType)
+    EAbsTypedSig body -> do
+      (argType, bodyType) <- infer body
+      return (TArrow argType bodyType)
+    _ -> Left "Pattern match is not complete" -- TODO: Complete Pattern Match
 
 bidirectionalCheck ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
@@ -181,13 +181,13 @@ bidirectionalCheckInferScoped ::
   Context' ty n ->
   FreeFoil.ScopedAST binder sig n {- exp -} ->
   Either String (ScopedCheckInfer binder ty n)
-bidirectionalCheckInferScoped scope (FreeFoil.ScopedAST binder body) =
+bidirectionalCheckInferScoped _scope (FreeFoil.ScopedAST binder _body) =
   case (Foil.assertExt binder, Foil.assertDistinct binder) of
     (Foil.Ext, Foil.Distinct) -> do
       return
         CheckInfer
           { infer = Left "cannot infer under binder",
-            check = \expectedType -> Left "cannot check under binder"
+            check = \_expectedType -> Left "cannot check under binder"
           }
 
 -- let scope' = Foil.addNameBinders binder _ (Foil.sink <$> scope)

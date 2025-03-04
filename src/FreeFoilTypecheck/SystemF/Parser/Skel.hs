@@ -25,7 +25,7 @@ transUVarIdent x = case x of
 
 transPattern :: FreeFoilTypecheck.SystemF.Parser.Abs.Pattern -> Result
 transPattern x = case x of
-  FreeFoilTypecheck.SystemF.Parser.Abs.PatternVar ident -> failure x
+  FreeFoilTypecheck.SystemF.Parser.Abs.PatternAsc pattern_ term -> failure x
 
 transTerm :: FreeFoilTypecheck.SystemF.Parser.Abs.Term -> Result
 transTerm x = case x of
@@ -39,7 +39,7 @@ transTerm x = case x of
   FreeFoilTypecheck.SystemF.Parser.Abs.EIsZero term -> failure x
   FreeFoilTypecheck.SystemF.Parser.Abs.ETyped term1 term2 -> failure x
   FreeFoilTypecheck.SystemF.Parser.Abs.ELet pattern_ term scopedterm -> failure x
-  FreeFoilTypecheck.SystemF.Parser.Abs.EAbsTyped pattern_ term scopedterm -> failure x
+  FreeFoilTypecheck.SystemF.Parser.Abs.EAbsTyped pattern_ scopedterm -> failure x
   FreeFoilTypecheck.SystemF.Parser.Abs.EAbsUntyped pattern_ scopedterm -> failure x
   FreeFoilTypecheck.SystemF.Parser.Abs.EApp term1 term2 -> failure x
   FreeFoilTypecheck.SystemF.Parser.Abs.ETAbs pattern_ scopedterm -> failure x

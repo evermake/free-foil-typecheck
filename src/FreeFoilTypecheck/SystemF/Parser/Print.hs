@@ -143,7 +143,7 @@ instance Print FreeFoilTypecheck.SystemF.Parser.Abs.UVarIdent where
   prt _ (FreeFoilTypecheck.SystemF.Parser.Abs.UVarIdent i) = doc $ showString i
 instance Print FreeFoilTypecheck.SystemF.Parser.Abs.Pattern where
   prt i = \case
-    FreeFoilTypecheck.SystemF.Parser.Abs.PatternVar id_ -> prPrec i 0 (concatD [prt 0 id_])
+    FreeFoilTypecheck.SystemF.Parser.Abs.PatternAsc pattern_ term -> prPrec i 0 (concatD [prt 0 pattern_, doc (showString ":"), prt 0 term])
 
 instance Print FreeFoilTypecheck.SystemF.Parser.Abs.Term where
   prt i = \case
@@ -157,7 +157,7 @@ instance Print FreeFoilTypecheck.SystemF.Parser.Abs.Term where
     FreeFoilTypecheck.SystemF.Parser.Abs.EIsZero term -> prPrec i 2 (concatD [doc (showString "iszero"), doc (showString "("), prt 0 term, doc (showString ")")])
     FreeFoilTypecheck.SystemF.Parser.Abs.ETyped term1 term2 -> prPrec i 0 (concatD [prt 1 term1, doc (showString ":"), prt 0 term2])
     FreeFoilTypecheck.SystemF.Parser.Abs.ELet pattern_ term scopedterm -> prPrec i 1 (concatD [doc (showString "let"), prt 0 pattern_, doc (showString "="), prt 1 term, doc (showString "in"), prt 0 scopedterm])
-    FreeFoilTypecheck.SystemF.Parser.Abs.EAbsTyped pattern_ term scopedterm -> prPrec i 1 (concatD [doc (showString "\955"), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString "."), prt 0 scopedterm])
+    FreeFoilTypecheck.SystemF.Parser.Abs.EAbsTyped pattern_ scopedterm -> prPrec i 1 (concatD [doc (showString "\955"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
     FreeFoilTypecheck.SystemF.Parser.Abs.EAbsUntyped pattern_ scopedterm -> prPrec i 1 (concatD [doc (showString "\955"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
     FreeFoilTypecheck.SystemF.Parser.Abs.EApp term1 term2 -> prPrec i 1 (concatD [prt 1 term1, prt 2 term2])
     FreeFoilTypecheck.SystemF.Parser.Abs.ETAbs pattern_ scopedterm -> prPrec i 1 (concatD [doc (showString "\923"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
