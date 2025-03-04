@@ -110,21 +110,19 @@ class
     Either String (ty n) -- type
 
 instance
-  ( forall n. Show (TypeError (FreeFoil.AST binder TermSig n)),
-    Foil.UnifiablePattern binder
-  ) =>
-  TypingSig binder (FreeFoil.AST binder TermSig) TermSig
+  ( forall n. Show (TypeError (Term n))) =>
+  TypingSig (FoilPattern Term) Term TermSig
   where
   inferSig _scope = \case
-    ETrueSig -> return TBool
+    ETrueSig -> return (Term TBool)
     EAppSig t1 t2 ->
       infer t1 >>= \case
         TArrow a b -> do
           check t2 a
           return b
         _ -> Left "not a function"
-    EAbsTypedSig body -> do
-      (argType, bodyType) <- infer body
+    EAbsSig body -> do
+      Scoped (FoilPatternAsc x argType) bodyType <- infer body
       return (TArrow argType bodyType)
     _ -> Left "Pattern match is not complete" -- TODO: Complete Pattern Match
 
@@ -253,18 +251,9 @@ typecheck scope (ELet e1 (FoilPatternVar binder) e2) expectedType = do
           unsinkType scope type2
 
 -- Γ, x : A ⊢ t ⇐ B
--- —————————————————————
--- Γ  ⊢  λx. t  ⇐  A → B
-typecheck scope (EAbsUntyped pat body) expectedType = do
-  case expectedType of
-    TArrow argType _resultType ->
-      typecheck scope (EAbsTyped argType pat body) expectedType
-    _ -> Left ("unexpected λ-abstraction when typechecking against functional type: " <> show expectedType)
-
--- Γ, x : A ⊢ t ⇐ B
 -- ————————————————————————
 -- Γ  ⊢  λx:A. t  ⇐  A → B
-typecheck scope (EAbsTyped argTypeActual (FoilPatternVar pat) body) expectedType = do
+typecheck scope (EAbs (FoilPatternAsc pat argTypeActual) body) expectedType = do
   case expectedType of
     TArrow argType resultType -> do
       (scope, argTypeActual) `shouldBe` argType
@@ -383,14 +372,14 @@ inferType scope (ELet e1 (FoilPatternVar binder) e2) = do
       let newScope = extendContext binder type1 scope -- Γ' = Γ, x : type1
       type' <- inferType newScope e2 -- Γ' ⊢ e2 : ?
       unsinkType scope type'
-inferType scope (EAbsTyped type_ (FoilPatternVar x) e) = do
+inferType scope (EAbs (FoilPatternAsc x type_) e) = do
   case Foil.assertDistinct x of
     Foil.Distinct -> do
       -- Γ ⊢ λx : type_. e : ?
       let newScope = extendContext x type_ scope -- Γ' = Γ, x : type_
       type' <- inferType newScope e
       fmap (TArrow type_) (unsinkType scope type')
-inferType _scope (EAbsUntyped _ _) = error "cannot infer λ-abstraction without explicit type annotation for the argument" -- TODO
+-- inferType _scope (EAbsUntyped _ _) = error "cannot infer λ-abstraction without explicit type annotation for the argument" -- TODO
 inferType scope (EApp e1 e2) = do
   -- (Γ ⊢ e1) (Γ ⊢ e2) : ?
   type1 <- inferType scope e1 -- Γ ⊢ e1 : type1
