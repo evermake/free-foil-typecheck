@@ -4,6 +4,7 @@ import Control.Monad (forM_)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as Foil
 import Data.List
+import qualified Data.Set as Set
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed, toTypeClosed)
@@ -55,11 +56,11 @@ dirWalk filefunc top = do
 programTypesMatch :: String -> String -> Either String Bool
 programTypesMatch actual expected = do
   typeExpected <- toTypeClosed <$> pType tokensExpected
-  let vars = allUVarsOfType typeExpected
+  let vars = Set.toList (allUVarsOfType typeExpected)
   let genExpected = generalize vars typeExpected
   exprActual <- toExpClosed <$> pExp tokensActual
   typeActual <- inferTypeNewClosed exprActual
-  let vars' = allUVarsOfType typeActual
+  let vars' = Set.toList (allUVarsOfType typeActual)
   let genActual = generalize vars' typeActual
   case (Foil.alphaEquiv Foil.emptyScope genActual genExpected) of
     True -> Right True

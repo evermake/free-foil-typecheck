@@ -19,6 +19,8 @@ import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Hashable (Hashable (..))
 import qualified Data.IntMap as IntMap
+import qualified Data.Set as Set
+import Debug.Trace (trace)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Syntax
 
@@ -28,6 +30,8 @@ import FreeFoilTypecheck.HindleyMilner.Syntax
 deriving instance Functor (Foil.NameMap n)
 
 deriving instance Foldable (Foil.NameMap n)
+
+deriving instance (Show a) => Show (Foil.NameMap n a)
 
 instance Data.Hashable.Hashable Raw.UVarIdent where
   hashWithSalt salt (Raw.UVarIdent s) = Data.Hashable.hashWithSalt salt s
@@ -210,7 +214,7 @@ generalizeTypeCheck typ = do
               Nothing -> error $ "Unification variable " ++ show ident ++ " not found in levels map"
               Just l -> l > level
           )
-          (allUVarsOfType typ)
+          (Set.toList (allUVarsOfType typ))
   return $ generalize toQuantify typ
 
 specializeTypeCheck :: Type' -> TypeCheck n Type'
@@ -220,6 +224,37 @@ specializeTypeCheck = \case
     let subst = Foil.addSubst Foil.identitySubst binder x
     specializeTypeCheck (FreeFoil.substitute Foil.emptyScope subst typ')
   typ' -> return typ'
+
+-- | Log the current TypingContext using Debug.Trace.
+logContext :: String -> TypeCheck n ()
+logContext msg = do
+  TypingContext constraints substs ctx freshId levelsMap level <- get
+  TypeCheck $ \tc ->
+    trace
+      ( "\n=== "
+          ++ msg
+          ++ " ===\n"
+          ++ "Constraints: "
+          ++ show constraints
+          ++ "\n"
+          ++ "Substitutions: "
+          ++ show substs
+          ++ "\n"
+          ++ "Fresh ID: "
+          ++ show freshId
+          ++ "\n"
+          ++ "Current Level: "
+          ++ show level
+          ++ "\n"
+          ++ "Levels Map: "
+          ++ show levelsMap
+          ++ "\n"
+          ++ "Context: "
+          ++ show ctx
+          ++ "\n"
+          ++ "===================="
+      )
+      $ Right ((), tc)
 
 -- ** Unification
 
@@ -259,7 +294,7 @@ unify1 levelsMap c =
       if checkOccurs x typ
         then Left "occurs check failed"
         else
-          let allTypVars = allUVarsOfType typ
+          let allTypVars = Set.toList (allUVarsOfType typ)
            in let updatedLevelsMap = case HashMap.lookup x levelsMap of
                     Nothing -> Left "unification variable not found in levels map"
                     Just xLevel ->
@@ -273,7 +308,9 @@ unify1 levelsMap c =
                     Right newLevelsMap -> Right ([(x, typ)], newLevelsMap)
 
 unifyWith :: IdentLevelMap -> [USubst'] -> [Constraint] -> Either String ([USubst'], IdentLevelMap)
-unifyWith levelsMap substs constraints = unify levelsMap (map (applySubstsToConstraint substs) constraints)
+unifyWith map1 substs1 constraints = do
+  (substs2, map2) <- unify map1 (map (applySubstsToConstraint substs1) constraints)
+  return (substs1 +++ substs2, map2)
 
 applySubstsToConstraint :: [USubst'] -> Constraint -> Constraint
 applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
@@ -300,10 +337,10 @@ applySubstsInSubsts substs (l, r) = (l, applySubstsToType substs r)
 
 -- ** Utilities
 
-allUVarsOfType :: Type' -> [Raw.UVarIdent]
-allUVarsOfType (TUVar ident) = [ident]
-allUVarsOfType (FreeFoil.Var _) = []
-allUVarsOfType (FreeFoil.Node node) = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] node
+allUVarsOfType :: Type' -> Set.Set Raw.UVarIdent
+allUVarsOfType (TUVar ident) = Set.singleton ident
+allUVarsOfType (FreeFoil.Var _) = Set.empty
+allUVarsOfType (FreeFoil.Node node) = foldl (\idents typ -> Set.union idents (allUVarsOfType typ)) Set.empty node
 
 popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
 popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
