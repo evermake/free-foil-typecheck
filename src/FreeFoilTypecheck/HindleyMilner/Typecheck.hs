@@ -85,7 +85,7 @@ xs +++ ys = map (applySubstsInSubsts ys) xs ++ ys
 reconstructType :: Exp n -> TypeCheck n Type'
 reconstructType ETrue = return TBool
 reconstructType EFalse = return TBool
-reconstructType (ENat _) = return TNat -- TypeCheck $ \tc -> Right (TNat, tc)
+reconstructType (ENat _) = return TNat
 reconstructType (FreeFoil.Var x) = do
   TypingContext _ _ ctx _ _ _ <- get
   specializeTypeCheck (Foil.lookupName x ctx)
@@ -340,6 +340,8 @@ minUVarLevelOfScoped levelsMap (FreeFoil.ScopedAST _binder body) = minUVarLevelO
 -- forall x0 . (forall x1 . x0 -> x1 -> x0)
 -- >>> generalize ["?b", "?a"] "?a -> ?b -> ?a"
 -- forall x0 . (forall x1 . x1 -> x0 -> x1)
+-- >>> generalize ["?y"] "?x -> ?y -> ?z"
+-- forall x0 . ?x -> x0 -> ?z
 generalize :: [Raw.UVarIdent] -> Type' -> Type'
 generalize = go Foil.emptyScope
   where
