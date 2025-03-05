@@ -15,11 +15,11 @@ import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import qualified Data.Bifoldable
 import Data.Bifunctor
-import qualified Data.List as List
 import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Hashable (Hashable (..))
 import qualified Data.IntMap as IntMap
+import qualified Data.List as List
 import qualified Data.Set as Set
 import Debug.Trace (trace)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
@@ -80,8 +80,8 @@ inferTypeNewClosed expr = do
   (substs', _) <- unifyWith levelsMap substs constrs
   return (applySubstsToType substs' type')
 
-evalTypeCheck' :: TypeCheck Foil.VoidS a -> Either String a
-evalTypeCheck' tc = do
+evalTypeCheck :: TypeCheck Foil.VoidS a -> Either String a
+evalTypeCheck tc = do
   (result, _ctx) <- runTypeCheck tc initialTypingContext
   return result
 
@@ -243,12 +243,11 @@ alphaEquivPolyTypes l r = do
     else do
       levelsMap <- gets tcLevels
       case unify1 levelsMap (l', r') of
-        Left _ -> trace "asd" $ return False
-        Right (substs, _) -> trace "successful unification" $ do
+        Left _ -> return False
+        Right (substs, _) -> do
           let matchings = [(x, y) | (x, TUVar y) <- substs]
               allXs = List.sort xs == List.sort (map fst matchings)
               allYs = List.sort ys == List.sort (map snd matchings)
-          trace ("xs = " <> show xs <> "\n" <> "ys = " <> show ys <> "\n" <> "xs' = " <> show (map fst matchings)  <> "\n" <> "ys' = " <> show (map snd matchings)) $
             return (allXs && allYs)
 
 specializeTypeCheck :: Type' -> TypeCheck n Type' 

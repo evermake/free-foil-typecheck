@@ -1,14 +1,12 @@
 module FreeFoilTypecheck.HindleyMilner.TypecheckSpec where
 
 import Control.Monad (forM_)
-import qualified Control.Monad.Foil as Foil
-import qualified Control.Monad.Free.Foil as Foil
 import Data.List
 import qualified Data.Set as Set
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed, toTypeClosed)
-import FreeFoilTypecheck.HindleyMilner.Typecheck (allUVarsOfType, generalize, inferTypeNewClosed)
+import FreeFoilTypecheck.HindleyMilner.Typecheck (allUVarsOfType, alphaEquivPolyTypes, evalTypeCheck, generalize, inferTypeNewClosed)
 import System.Directory
 import System.FilePath
 import Test.Hspec
@@ -62,9 +60,10 @@ programTypesMatch actual expected = do
   typeActual <- inferTypeNewClosed exprActual
   let vars' = Set.toList (allUVarsOfType typeActual)
   let genActual = generalize vars' typeActual
-  case (Foil.alphaEquiv Foil.emptyScope genActual genExpected) of
-    True -> Right True
-    False ->
+  case evalTypeCheck $ alphaEquivPolyTypes genActual genExpected of
+    Left err -> Left err
+    Right True -> Right True
+    Right False ->
       Left $
         unlines
           [ "types do not match",
