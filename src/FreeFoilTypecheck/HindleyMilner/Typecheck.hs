@@ -15,6 +15,7 @@ import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import qualified Data.Bifoldable
 import Data.Bifunctor
+import qualified Data.List as List
 import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Hashable (Hashable (..))
@@ -75,9 +76,17 @@ instance Monad (TypeCheck n) where
 -- Right Nat
 inferTypeNewClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeNewClosed expr = do
-  (type', TypingContext constrs substs _ _ levelsMap _) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0 HashMap.empty 1)
+  (type', TypingContext constrs substs _ _ levelsMap _) <- runTypeCheck (reconstructType expr) initialTypingContext
   (substs', _) <- unifyWith levelsMap substs constrs
   return (applySubstsToType substs' type')
+
+evalTypeCheck' :: TypeCheck Foil.VoidS a -> Either String a
+evalTypeCheck' tc = do
+  (result, _ctx) <- runTypeCheck tc initialTypingContext
+  return result
+
+initialTypingContext :: TypingContext Foil.VoidS
+initialTypingContext = TypingContext [] [] Foil.emptyNameMap 0 HashMap.empty 1
 
 infixr 6 +++
 
@@ -154,6 +163,9 @@ reconstructType (EFor eFrom eTo (FoilPatternVar x) eBody) = do
 get :: TypeCheck n (TypingContext n)
 get = TypeCheck $ \tc -> Right (tc, tc)
 
+gets :: (TypingContext n -> a) -> TypeCheck n a
+gets f = TypeCheck $ \tc -> Right (f tc, tc)
+
 put :: TypingContext n -> TypeCheck n ()
 put new = TypeCheck $ \_old -> Right ((), new)
 
@@ -176,17 +188,14 @@ unifyTypeCheck :: TypeCheck n ()
 unifyTypeCheck = do
   TypingContext constraints substs ctx freshId levelsMap level <- get
   (substs', newLevelsMap) <- eitherToTypeCheck (unifyWith levelsMap substs constraints)
-  put (TypingContext [] (substs +++ substs') ctx freshId newLevelsMap level)
+  put (TypingContext [] substs' ctx freshId newLevelsMap level)
 
 enterScope :: Foil.NameBinder n l -> Type' -> TypeCheck l a -> TypeCheck n a
 enterScope binder type_ code = do
-  TypingContext constraints substs ctx freshId levelsMap level <- get
-  let ctx' = Foil.addNameBinder binder type_ ctx
-  (x, TypingContext constraints'' substs'' ctx'' freshId'' levelsMap'' level'') <-
-    eitherToTypeCheck $
-      runTypeCheck code (TypingContext constraints substs ctx' freshId levelsMap level)
-  let ctx''' = popNameBinder binder ctx''
-  put (TypingContext constraints'' substs'' ctx''' freshId'' levelsMap'' level'')
+  ctx <- get
+  let ctx' = ctx { tcTypings = Foil.addNameBinder binder type_ (tcTypings ctx) }
+  (x, ctx'') <- eitherToTypeCheck $ runTypeCheck code ctx'
+  put ctx'' { tcTypings = popNameBinder binder (tcTypings ctx'') }
   return x
 
 addConstraints :: [Constraint] -> TypeCheck n ()
@@ -201,6 +210,14 @@ freshTypeVar = do
   let newLevelsMap = HashMap.insert newIdent level levelsMap
   put (TypingContext constraints substs ctx (freshId + 1) newLevelsMap level)
   return (TUVar newIdent)
+
+freshTypeVarWithIdent :: TypeCheck n (Type', Raw.UVarIdent)
+freshTypeVarWithIdent = do
+  TypingContext constraints substs ctx freshId levelsMap level <- get
+  let newIdent = makeIdent freshId
+  let newLevelsMap = HashMap.insert newIdent level levelsMap
+  put (TypingContext constraints substs ctx (freshId + 1) newLevelsMap level)
+  return (TUVar newIdent, newIdent)
 
 -- TODO: AST is updated by calling the `applySubstToType` for each unification
 --       variable to be generalized. It would be better to update the AST
@@ -217,13 +234,39 @@ generalizeTypeCheck typ = do
           (Set.toList (allUVarsOfType typ))
   return $ generalize toQuantify typ
 
-specializeTypeCheck :: Type' -> TypeCheck n Type'
+alphaEquivPolyTypes :: Type' -> Type' -> TypeCheck n Bool
+alphaEquivPolyTypes l r = do
+  (l', xs) <- specializeTypeCheckWithFreshVars l
+  (r', ys) <- specializeTypeCheckWithFreshVars r
+  if length xs /= length ys
+    then return False
+    else do
+      levelsMap <- gets tcLevels
+      case unify1 levelsMap (l', r') of
+        Left _ -> trace "asd" $ return False
+        Right (substs, _) -> trace "successful unification" $ do
+          let matchings = [(x, y) | (x, TUVar y) <- substs]
+              allXs = List.sort xs == List.sort (map fst matchings)
+              allYs = List.sort ys == List.sort (map snd matchings)
+          trace ("xs = " <> show xs <> "\n" <> "ys = " <> show ys <> "\n" <> "xs' = " <> show (map fst matchings)  <> "\n" <> "ys' = " <> show (map snd matchings)) $
+            return (allXs && allYs)
+
+specializeTypeCheck :: Type' -> TypeCheck n Type' 
 specializeTypeCheck = \case
   TForAll (FoilTPatternVar binder) typ' -> do
     x <- freshTypeVar
     let subst = Foil.addSubst Foil.identitySubst binder x
     specializeTypeCheck (FreeFoil.substitute Foil.emptyScope subst typ')
   typ' -> return typ'
+
+specializeTypeCheckWithFreshVars :: Type' -> TypeCheck n (Type', [Raw.UVarIdent])
+specializeTypeCheckWithFreshVars = \case
+  TForAll (FoilTPatternVar binder) typ' -> do
+    (x, ident) <- freshTypeVarWithIdent
+    let subst = Foil.addSubst Foil.identitySubst binder x
+    (typ'', idents) <- specializeTypeCheckWithFreshVars (FreeFoil.substitute Foil.emptyScope subst typ')
+    return (typ'', ident : idents)
+  typ' -> return (typ', [])
 
 -- | Log the current TypingContext using Debug.Trace.
 logContext :: String -> TypeCheck n ()
@@ -263,7 +306,7 @@ unify levelsMap [] = return ([], levelsMap)
 unify levelsMap (c : cs) = do
   (substs, newMap) <- unify1 levelsMap c
   (substs', newMap') <- unifyWith newMap substs cs
-  return (substs +++ substs', newMap')
+  return (substs', newMap')
 
 unify1 :: IdentLevelMap -> Constraint -> Either String ([USubst'], IdentLevelMap)
 unify1 levelsMap c =
