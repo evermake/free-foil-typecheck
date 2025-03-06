@@ -19,7 +19,7 @@ import Data.String (IsString (..))
 import qualified FreeFoilTypecheck.SystemF.Parser.Abs as Raw
 import qualified FreeFoilTypecheck.SystemF.Parser.Par as Raw
 import qualified FreeFoilTypecheck.SystemF.Parser.Print as Raw
-import FreeFoilTypecheck.SystemF.Syntax.Pattern hiding (getPatternBinder)
+import FreeFoilTypecheck.SystemF.Syntax.Pattern
 
 -- $setup
 -- >>> :set -XOverloadedStrings
