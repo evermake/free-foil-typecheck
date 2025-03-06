@@ -116,7 +116,7 @@ instance
   (forall n. Show (TypeError (Term n)), MonadFail (Either String)) =>
   TypingSig (FoilPattern Term) Term TermSig
   where
-  inferSig _scope = \case
+  inferSig scope = \case
     ETrueSig -> return (Term TBool)
     EAppSig t1 t2 ->
       infer t1 >>= \case
@@ -125,8 +125,11 @@ instance
           return (Term b)
         _ -> Left "not a function"
     EAbsSig body -> do
-      Scoped (FoilPatternAsc x (Term argType)) (Term bodyType) <- infer body
-      return (Term (TArrow argType bodyType))
+      Scoped (FoilPatternAsc x (Term argType)) bodyType <- infer body
+      case Foil.assertDistinct x of
+        Foil.Distinct -> do
+          Term bodyType' <- unsinkType scope bodyType
+          return (Term (TArrow argType bodyType'))
     _ -> Left "Pattern match is not complete" -- TODO: Complete Pattern Match
 
 bidirectionalCheck ::
@@ -202,6 +205,9 @@ typecheck' ::
   ty n {- type -} ->
   Either String ()
 typecheck' = bidirectionalCheck
+
+extendContextPattern :: (Foil.Distinct n, Foil.CoSinkable pat) => pat n l -> Term n -> Context n -> Context l
+extendContextPattern pattern = extendContext' (Foil.nameBinderListOf pattern)
 
 extendContext :: (Foil.Distinct n) => Foil.NameBinder n l -> Term n -> Context n -> Context l
 extendContext binder type_ =
@@ -367,14 +373,16 @@ inferType scope (Term (EIsZero e)) = do
   return (Term TBool)
 inferType scope (Term (ETyped expr type_)) = do
   typecheck scope (Term expr) (Term type_)
-inferType scope (Term (ELet e1 (FoilPatternVar binder) e2)) = do
-  case Foil.assertDistinct binder of
+inferType scope (Term (ELet e1 pat e2)) = do
+  case Foil.assertDistinct pat of
     Foil.Distinct -> do
       -- Γ ⊢ let x = e1 in e2 : ?
       type1 <- inferType scope (Term e1) -- Γ ⊢ e1 : type1
-      let newScope = extendContext binder type1 scope -- Γ' = Γ, x : type1
+      let newScope = extendContextPattern pat type1 scope -- Γ' = Γ, x : type1
       type' <- inferType newScope (Term e2) -- Γ' ⊢ e2 : ?
       unsinkType scope type'
+inferType _scope (Term (EAbs (FoilPatternVar _x) _e)) = do
+  Left "cannot infer lambda-abstraction without an explicit type annotation for the argument"
 inferType scope (Term (EAbs (FoilPatternAsc x type_) e)) = do
   case Foil.assertDistinct x of
     Foil.Distinct -> do
@@ -391,18 +399,18 @@ inferType scope (Term (EApp e1 e2)) = do
       _ <- typecheck scope (Term e2) (Term type_)
       return (Term types)
     _ -> Left ("expected type\n  TArrow\nbut got type\n  " <> show type1)
-inferType scope (Term (EFor e1 e2 (FoilPatternVar x) expr)) = do
-  case Foil.assertDistinct x of
+inferType scope (Term (EFor e1 e2 pat expr)) = do
+  case Foil.assertDistinct pat of
     Foil.Distinct -> do
       _ <- typecheck scope (Term e1) (Term TNat)
       _ <- typecheck scope (Term e2) (Term TNat)
-      let newScope = extendContext x (Term TNat) scope
+      let newScope = extendContextPattern pat (Term TNat) scope
       type' <- inferType newScope (Term expr)
       unsinkType scope type'
-inferType scope (Term (ETAbs pat@(FoilPatternVar x) e)) = do
-  case Foil.assertDistinct x of
+inferType scope (Term (ETAbs pat e)) = do
+  case Foil.assertDistinct pat of
     Foil.Distinct -> do
-      let newScope = extendContext x (Term TType) scope
+      let newScope = extendContextPattern pat (Term TType) scope
       type' <- inferType newScope (Term e)
       fmap (Term . TForAll pat . convertTermToAST) (unsinkType newScope type')
 inferType scope (Term (ETApp e t)) = do
