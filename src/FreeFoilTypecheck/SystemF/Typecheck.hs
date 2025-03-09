@@ -419,7 +419,7 @@ inferType scope (Term (ETApp e t)) = do
     Term (TForAll (FoilPatternVar binder) tbody) -> do
       let subst = Foil.addSubst Foil.identitySubst binder t
        in return (Term (FreeFoil.substitute (nameMapToScope scope) subst tbody))
-    _ -> Left ("unexpected type application (not a forall)")
+    _ -> Left "unexpected type application (not a forall)"
 inferType _ (Term TNat) = Right (Term TNat)
 inferType _ (Term TType) = Right (Term TType)
 inferType _ (Term TBool) = Right (Term TBool)

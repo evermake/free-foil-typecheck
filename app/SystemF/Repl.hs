@@ -17,7 +17,7 @@ repl input =
     Left err -> "Parsing error: " ++ err
     Right e -> case inferType emptyNameMap e of
       Left err -> "Typechecking error: " ++ err
-      Right _type -> case eval emptyNameMap e of
+      Right _type -> case newEval emptyNameMap e of
         Left err     -> "Evaluation error: " ++ err
         Right outExp -> show outExp
   where

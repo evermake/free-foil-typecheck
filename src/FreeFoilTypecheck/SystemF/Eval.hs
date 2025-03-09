@@ -20,7 +20,7 @@ import           FreeFoilTypecheck.SystemF.Typecheck            (Context, nameMa
 -- Left "Unsupported expression in addition"
 -- >>> eval emptyNameMap "ΛX. λx:X. x"
 -- Right Λ x0 . λ x1 : x0 . x1
-eval :: (Distinct n) => Context n -> Term n -> Either String (Term n)
+eval :: (Distinct n) => Context n -> AST (FoilPattern Term) TermSig n -> Either String (AST (FoilPattern Term) TermSig n)
 eval _scope (Var x) = Right (Var x)
 eval _scope ETrue = Right ETrue
 eval _scope EFalse = Right EFalse
@@ -54,13 +54,16 @@ eval scope (ELet e1 (FoilPatternVar xp) e2) = do
   e1' <- eval scope e1
   let subst = addSubst identitySubst xp e1'
   eval scope (substitute (nameMapToScope scope) subst e2)
-eval _scope (EAbsTyped type_ x e) = Right (EAbsTyped type_ x e)
-eval _scope (EAbsUntyped x e) = Right (EAbsUntyped x e)
+eval scope (ELet e1 (FoilPatternAsc x _t) e2) = do -- TODO: consider to replace pm for (FoilPatternAsc x _t) with pat
+  e1' <- eval scope e1
+  let subst = addSubst identitySubst x e1'
+  eval scope (substitute (nameMapToScope scope) subst e2)
+eval _scope (EAbs x e) = Right (EAbs x e)
 eval scope (EApp e1 e2) = do
   e1' <- eval scope e1
   e2' <- eval scope e2
   case e1' of
-    EAbsTyped _ (FoilPatternVar xp) e -> do
+    EAbs (FoilPatternVar xp) e -> do
       let subst = addSubst identitySubst xp e2'
       eval scope (substitute (nameMapToScope scope) subst e)
     _ -> Left "Unsupported expression in application"
@@ -75,6 +78,17 @@ eval scope (EFor e1 e2 (FoilPatternVar xp) expr) = do
         eval scope (substitute (nameMapToScope scope) subst expr)
       return (last results)
     _ -> Left "Invalid expression in the range of for-loop"
+eval scope (EFor e1 e2 (FoilPatternAsc x _t) expr) = do -- TODO: consider to replace pm for (FoilPatternAsc x _t) with pat
+  e1_val <- eval scope e1
+  e2_val <- eval scope e2
+  case (e1_val, e2_val) of
+    (ENat from, ENat to) -> do
+      let ys = [from .. to]
+      results <- forM ys $ \y -> do
+        let subst = addSubst identitySubst x (ENat y)
+        eval scope (substitute (nameMapToScope scope) subst expr)
+      return (last results)
+    _ -> Left "Invalid expression in the range of for-loop"
 eval scope (ETApp e t) = do
   e' <- eval scope e
   t' <- eval scope t
@@ -82,7 +96,8 @@ eval scope (ETApp e t) = do
     ETAbs (FoilPatternVar xp) body -> do
       let subst = addSubst identitySubst xp t'
       eval scope (substitute (nameMapToScope scope) subst body)
-    _other -> Left ("Unexpected type application to " <> show _other)
+  -- _other -> Left ("Unexpected type application to " <> show _other) FIXME:  Could not deduce ‘Show (AST (FoilPattern Term) TermSig n)
+    _other -> Left ("Unexpected type application")
 eval _scope (ETAbs pat e) = Right (ETAbs pat e)
 
 eval _ TNat = Right TNat
@@ -91,3 +106,8 @@ eval _ TBool = Right TBool
 eval _ (TArrow l r) = Right (TArrow l r)
 eval _ (TForAll p b) = Right (TForAll p b)
 eval _ (TUVar n) = Right (TUVar n)
+
+newEval :: Distinct n => Context n -> Term n -> Either String (Term n)
+newEval scope (Term a) = case eval scope a of
+  Left err -> Left err
+  Right a' -> Right (Term a')

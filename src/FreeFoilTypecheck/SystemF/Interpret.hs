@@ -23,7 +23,7 @@ interpret input =
     Left err -> Failure ParsingError ("Parsing error: " ++ err)
     Right e -> case inferType emptyNameMap e of
       Left err -> Failure TypecheckingError ("Typechecking error: " ++ err)
-      Right _type -> case eval emptyNameMap e of
+      Right _type -> case newEval emptyNameMap e of
         Left err -> Failure EvaluationError ("Evaluation error: " ++ err)
         Right outExp -> Success (show outExp)
   where
