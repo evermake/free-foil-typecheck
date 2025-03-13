@@ -79,8 +79,17 @@ data CheckInfer ty (n :: Foil.S) = CheckInfer
     infer :: Either String (ty n)
   }
 
+-- data ScopedCheckInfer pat ty (n :: Foil.S) = CheckInfer
+--   { check' :: Scoped pat ty n -> Either String (),
+--     infer' :: Either String (Scoped pat ty n)
+--   }
+
 type ScopedCheckInfer binder ty n =
   CheckInfer (Scoped binder ty) n
+
+-- let x = e₁ in e₂
+-- e₁ => T₁
+-- x : T₁ ⊢ e₂ =>
 
 class
   (forall n. Show (TypeError (ty n)), AlphaEquiv ty) =>
@@ -95,6 +104,12 @@ class
   -- checkSig scope (EAppSig t1 t2) expectedType = do
   --   TArrow a b <- infer t1
   --   check t2 a
+
+  annotateSig ::
+    Context' ty n -> -- context
+    sig (ScopedCheckInfer binder ty n) (CheckInfer ty n) -> -- expr node
+    ty n -> -- type
+    Either String (sig (ty n) ())
 
   checkSig ::
     (Foil.Distinct n) =>
@@ -112,10 +127,36 @@ class
     sig (ScopedCheckInfer binder ty n) (CheckInfer ty n) -> -- expr node
     Either String (ty n) -- type
 
+data AnnotatedPattern ty pat n l = AnnotatedPattern
+  { apAnnotation :: ty n
+  , apPattern    :: pat n l
+  } deriving (CoSinkable, UnifiablePattern, ...)
+
+annotateAST :: TypingSig pat ty sig => Context n -> AST pat sig n -> Either String (AST (AnnotatedPattern ty pat) sig n)
+annotateAST scope = \case
+  Var x -> Var x
+  Node node -> Node <$> do 
+    node' <- bidirectionaCheckInfer node
+    node'' <- annotateSig scope node'
+    case zipMatch node node'' of
+      Nothing -> error "fatal error"
+      Just node''' -> return $
+        bimap
+          (\(ScopedAST binder body, binderType) -> ScopedAST (AnnotatedPattern binderType binder) body)
+          (\(subterm, ()) -> subterm)
+          node'''
+
 instance
   (forall n. Show (TypeError (Term n)), MonadFail (Either String)) =>
   TypingSig (FoilPattern Term) Term TermSig
   where
+
+  annotateSig ctx = \case
+    ELetSig e body -> \_expectedType -> do
+      typeOfE <- infer e
+      return (ELetSig () typeOfE)
+    _ -> _
+
   inferSig scope = \case
     ETrueSig -> return (Term TBool)
     EFalseSig -> return (Term TBool)
@@ -139,9 +180,25 @@ instance
       check e (Term TNat)
       return (Term TBool)
     -- ETypedSig e t -> do
-    --   check e t
-    --   return t
-    -- ELetSig x e ->
+    --   t' <- check t (Term TType)
+    --   check e t'
+    --   return t'
+
+
+    --  Γ ⊢ t₁ => T₁   Γ, x : T₁ ⊢ t₂ => T₂
+    -- ————————————————————————————————————
+    --  Γ ⊢ let x = t₁ in t₂ => T₂
+    -- ELetSig e body -> do
+    --   Scoped (FoilPatternAsc x (Term argType)) bodyType <- infer body
+    --   if alphaEquiv (Foil.nameMapToScope scope) t1 (Term argType)
+    --     then
+    --       case Foil.assertDistinct x of
+    --         Foil.Distinct -> do
+    --           Term bodyType' <- unsinkType scope bodyType
+    --           return (Term (TArrow argType bodyType'))
+    --     else
+    --       Left "t1 ≠ argType"
+
     EAppSig t1 t2 ->
       infer t1 >>= \case
         Term (TArrow a b) -> do
@@ -195,29 +252,42 @@ bidirectionaCheckInfer scope (FreeFoil.Var n) = do
             Left (show (TypeErrorUnexpectedType inferredType expectedType))
       }
 bidirectionaCheckInfer scope _t@(FreeFoil.Node node :: FreeFoil.AST binder sig n) = do
-  node' <- bitraverse (bidirectionalCheckInferScoped scope) (bidirectionaCheckInfer scope) node
+  node' <- bitraverse return (bidirectionaCheckInfer scope) node
+  node'' <- case zipMatch node' (annotateSig scope node') of
+    Nothing -> error "fatal error"
+    Just node'' -> return $ bimap
+      (\(ScopedAST binder body, ty) -> bidirectionalCheckInferScoped scope (ScopedAST (AnnotatedPattern ty binder) body))
+      (\(ci, ()) -> ci)
+      node''
   return
     CheckInfer
-      { infer = inferSig scope node',
-        check = checkSig scope node'
+      { infer = inferSig scope node'',
+        check = checkSig scope node''
       }
+
+class HasExactlyOneBinder pat where
+  extractExactlyOneBinder :: pat n l -> NameBinder n l
+
+instance HasExactlyOneBinder FoilPattern where
+  extractExactlyOneBinder (FoilPatternVar x) = x
+  extractExactlyOneBinder (FoilPatternAsc p _ty) = extractExactlyOneBinder p
 
 -- Γ, x : A ⊢ t  => B
 -- —————————————————————
 -- Γ  ⊢  λx:A.t  =>  A → B
 bidirectionalCheckInferScoped ::
-  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
+  (Foil.Distinct n, Bitraversable sig, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty, HasExactlyOneBinder pat) =>
   Context' ty n ->
-  FreeFoil.ScopedAST binder sig n {- exp -} ->
+  FreeFoil.ScopedAST (AnnotatedPattern ty binder) sig n {- exp -} ->
   Either String (ScopedCheckInfer binder ty n)
-bidirectionalCheckInferScoped _scope (FreeFoil.ScopedAST binder _body) =
+bidirectionalCheckInferScoped scope (FreeFoil.ScopedAST (AnnotatedPattern ty binder) body) =
   case (Foil.assertExt binder, Foil.assertDistinct binder) of
     (Foil.Ext, Foil.Distinct) -> do
-      return
-        CheckInfer
-          { infer = Left "cannot infer under binder",
-            check = \_expectedType -> Left "cannot check under binder"
-          }
+      let scope' = Foil.addNameBinder (extractExactlyOneBinder binder) ty scope
+      ci <- bidirectionaCheckInfer scope' body
+      return CheckInfer
+        { infer = Scoped binder <$> infer ci
+        , check = \(Scoped binder' expectedType) -> check ci expectedType }
 
 -- let scope' = Foil.addNameBinders binder _ (Foil.sink <$> scope)
 -- typeOfBody <- bidirectionalInfer scope' body
