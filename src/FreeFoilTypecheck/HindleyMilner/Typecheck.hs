@@ -86,7 +86,15 @@ evalTypeCheck tc = do
   return result
 
 initialTypingContext :: TypingContext Foil.VoidS
-initialTypingContext = TypingContext [] [] Foil.emptyNameMap 0 HashMap.empty 1
+initialTypingContext =
+  TypingContext
+    { tcConstraints = [],
+      tcSubsts = [],
+      tcTypings = Foil.emptyNameMap,
+      tcFreshId = 0,
+      tcLevels = HashMap.empty,
+      tcLevel = 1
+    }
 
 infixr 6 +++
 
@@ -171,8 +179,8 @@ put new = TypeCheck $ \_old -> Right ((), new)
 
 addLevel :: Int -> TypeCheck n ()
 addLevel diff = do
-  TypingContext x1 x2 x3 x4 x5 level <- get
-  put (TypingContext x1 x2 x3 x4 x5 (level + diff))
+  ctx <- get
+  put ctx {tcLevel = tcLevel ctx + diff}
 
 incrLevel :: TypeCheck n ()
 incrLevel = addLevel 1
@@ -193,9 +201,9 @@ unifyTypeCheck = do
 enterScope :: Foil.NameBinder n l -> Type' -> TypeCheck l a -> TypeCheck n a
 enterScope binder type_ code = do
   ctx <- get
-  let ctx' = ctx { tcTypings = Foil.addNameBinder binder type_ (tcTypings ctx) }
+  let ctx' = ctx {tcTypings = Foil.addNameBinder binder type_ (tcTypings ctx)}
   (x, ctx'') <- eitherToTypeCheck $ runTypeCheck code ctx'
-  put ctx'' { tcTypings = popNameBinder binder (tcTypings ctx'') }
+  put ctx'' {tcTypings = popNameBinder binder (tcTypings ctx'')}
   return x
 
 addConstraints :: [Constraint] -> TypeCheck n ()
@@ -248,9 +256,9 @@ alphaEquivPolyTypes l r = do
           let matchings = [(x, y) | (x, TUVar y) <- substs]
               allXs = List.sort xs == List.sort (map fst matchings)
               allYs = List.sort ys == List.sort (map snd matchings)
-            return (allXs && allYs)
+          return (allXs && allYs)
 
-specializeTypeCheck :: Type' -> TypeCheck n Type' 
+specializeTypeCheck :: Type' -> TypeCheck n Type'
 specializeTypeCheck = \case
   TForAll (FoilTPatternVar binder) typ' -> do
     x <- freshTypeVar
@@ -399,21 +407,6 @@ checkOccurs ident (FreeFoil.Node node) =
 
 checkOccursScoped :: Raw.UVarIdent -> FreeFoil.ScopedAST FoilTypePattern TypeSig n -> Bool
 checkOccursScoped ident (FreeFoil.ScopedAST _binder body) = checkOccurs ident body
-
--- | Returns the minimum level of all unification variables in the given type.
-minUVarLevelOf :: IdentLevelMap -> Type n -> Maybe Int
-minUVarLevelOf levelsMap (TUVar ident) = HashMap.lookup ident levelsMap
-minUVarLevelOf _ (FreeFoil.Var _) = Nothing
-minUVarLevelOf levelsMap (FreeFoil.Node node) =
-  maybeMin $ Data.Bifoldable.biList $ bimap (minUVarLevelOfScoped levelsMap) (minUVarLevelOf levelsMap) node
-  where
-    maybeMin :: [Maybe Int] -> Maybe Int
-    maybeMin [] = Nothing
-    maybeMin [x] = x
-    maybeMin (x : xs) = min x (maybeMin xs)
-
-minUVarLevelOfScoped :: IdentLevelMap -> FreeFoil.ScopedAST FoilTypePattern TypeSig n -> Maybe Int
-minUVarLevelOfScoped levelsMap (FreeFoil.ScopedAST _binder body) = minUVarLevelOf levelsMap body
 
 -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
 -- forall x0 . (forall x1 . x0 -> x1 -> x0)
