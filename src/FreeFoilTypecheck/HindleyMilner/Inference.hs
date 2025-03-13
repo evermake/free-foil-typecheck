@@ -30,7 +30,13 @@ newtype Subst n = Subst (Map.Map Raw.UVarIdent (Type n))
 
 class Typed a where
   applySubst :: (Foil.Distinct n) => Subst n -> a n -> a n
+
+  -- | Returns a set of all free (unification) variables of a Typed.
   freeVars :: a n -> Set.Set Raw.UVarIdent
+
+  -- | Returns whether a free (unification) variable occurs in a Typed.
+  checkOccurs :: Raw.UVarIdent -> a n -> Bool
+  checkOccurs i t = i `Set.member` freeVars t
 
 instance Typed (Foil.AST FoilTypePattern TypeSig) where
   applySubst :: (Foil.Distinct n) => Subst n -> Type n -> Type n
