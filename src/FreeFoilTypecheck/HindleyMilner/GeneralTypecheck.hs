@@ -1,6 +1,11 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+-- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -10,14 +15,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE StarIsType #-}
-{-# LANGUAGE DerivingStrategies #-}
--- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
-module FreeFoilTypecheck.HindleyMilner.GeneralTypecheck where 
+module FreeFoilTypecheck.HindleyMilner.GeneralTypecheck where
 
 -- import Control.Applicative (Const)
 import Control.Monad (ap)
@@ -25,15 +28,21 @@ import qualified Control.Monad.Foil as Foil
 -- import qualified Control.Monad.Foil as FreeFoil
 -- import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
+-- import qualified Data.Foldable as F
+-- import qualified Data.IntMap as IntMap
+
+import Control.Monad.Free.Foil.Generic (genericZipMatch2)
+import qualified Control.Monad.Free.Foil.Generic as FreeFoil
 import Data.Bifoldable
 import Data.Bifunctor
 import Data.Bifunctor.Sum
+import Data.Bifunctor.TH
 import Data.Bitraversable (Bitraversable (..))
--- import qualified Data.Foldable as F
--- import qualified Data.IntMap as IntMap
 import qualified Data.Kind as K
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Syntax
+import qualified GHC.Generics as GHC
+import Generics.Kind.TH (deriveGenericK)
 
 -- -- $setup
 -- -- >>> :set -XOverloadedStrings
@@ -82,13 +91,29 @@ data HMType ty
 -- -- ty n = AST binder (typeSig :+: MetaVarSig) n
 -- --
 
-newtype MetaVarSig scope term = MetaVarSig Raw.UVarIdent 
-  deriving (Eq, Show, FreeFoil.ZipMatch) 
-  -- deriving (Functor, Bifoldable, Bitraversable)
+newtype MetaVarSig scope term = MetaVarSig Raw.UVarIdent
+  deriving (Eq, Show, Functor, GHC.Generic)
+
+deriveGenericK ''MetaVarSig
+
+instance FreeFoil.ZipMatchK Raw.UVarIdent where
+  zipMatchWithK = FreeFoil.zipMatchViaEq
+
+instance FreeFoil.ZipMatchK MetaVarSig
+
+instance FreeFoil.ZipMatch MetaVarSig where
+  zipMatch = genericZipMatch2
+
+deriveBifunctor ''MetaVarSig
+deriveBifoldable ''MetaVarSig
+deriveBitraversable ''MetaVarSig
+
+-- deriving (Functor, Bifoldable, Bitraversable)
 
 -- -- deriving (..., ZipMatchK)
 
 type UType binder typeSig = FreeFoil.AST binder (Sum typeSig MetaVarSig)
+
 -- type ScopedUType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
 
 fromUVarIdent :: Raw.UVarIdent -> UType binder typeSig n
@@ -98,7 +123,7 @@ toUVarIdent :: UType binder typeSig n -> Maybe Raw.UVarIdent
 toUVarIdent (FreeFoil.Node (R2 (MetaVarSig x))) = Just x
 toUVarIdent _ = Nothing
 
-class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type ) (typeSig :: K.Type  -> K.Type  -> K.Type ) (sig :: K.Type  -> K.Type  -> K.Type ) where
+class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (sig :: K.Type -> K.Type -> K.Type) where
   inferSigHM ::
     sig (HMType (UType binder typeSig), UType binder typeSig Foil.VoidS) (UType binder typeSig Foil.VoidS) -> -- expr node
     TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS) -- typecheck result
@@ -117,14 +142,16 @@ injectUType = transAST L2
 
 -- L2 :: typeSig scope term -> (Sum typeSig MetaVarSig) scope term
 
-transAST :: (Bifunctor sig1) =>
+transAST ::
+  (Bifunctor sig1) =>
   (forall scope term. sig1 scope term -> sig2 scope term) ->
   FreeFoil.AST binder sig1 n ->
   FreeFoil.AST binder sig2 n
 transAST _ (FreeFoil.Var x) = FreeFoil.Var x
 transAST phi (FreeFoil.Node node) = FreeFoil.Node (phi (bimap (transScopedAST phi) (transAST phi) node))
 
-transScopedAST :: (Bifunctor sig1) =>
+transScopedAST ::
+  (Bifunctor sig1) =>
   (forall scope term. sig1 scope term -> sig2 scope term) ->
   FreeFoil.ScopedAST binder sig1 n ->
   FreeFoil.ScopedAST binder sig2 n
@@ -158,20 +185,21 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       return ty
     ENatSig _ -> do
       return (injectUType TNat)
-    EForSig _ _ _ -> undefined--fromType toType bodyType -> do
+    EForSig _ _ _ -> undefined -- fromType toType bodyType -> do
     -- do
     -- fromType `isExpectedToBe` (injectUType TNat)
     -- toType `isExpectedToBe` (injectUType TNat)
     -- return bodyType
     EAbsSig _ -> undefined
     ELetSig _ (_, _) -> undefined
-    --   generalizeHM eType xType
-    --   return bodyType
-    -- where
-      -- isExpectedToBe :: AlphaEquiv ty => Foil.Scope n -> ty n -> ty n -> Either (TypeError (ty n)) ()
-    --   actual `isExpectedToBe` expected =
-    --     unless (FreeFoil.alphaEquiv Foil.emptyScope actual expected) $
-    --       failTypeCheck "unexpected type" -- (TypeErrorUnexpectedType actual expected)
+
+--   generalizeHM eType xType
+--   return bodyType
+-- where
+-- isExpectedToBe :: AlphaEquiv ty => Foil.Scope n -> ty n -> ty n -> Either (TypeError (ty n)) ()
+--   actual `isExpectedToBe` expected =
+--     unless (FreeFoil.alphaEquiv Foil.emptyScope actual expected) $
+--       failTypeCheck "unexpected type" -- (TypeErrorUnexpectedType actual expected)
 
 -- unifyHM :: UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
 -- unifyHM _ _ = undefined
@@ -181,7 +209,6 @@ freshHM = undefined
 
 generalizeHM :: (UType binder typeSig) n -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n ((UType binder typeSig) n)
 generalizeHM _ _ = undefined
-
 
 unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
 unifyHM typ1 typ2 = do
@@ -202,8 +229,8 @@ unifyHM typ1 typ2 = do
         --  to unify further.
         Just lr -> do
           _ <- bitraverse (\t -> failTypeCheck "Unable to unify scoped type") (uncurry unifyHM) lr -- ignores "scopes", only works with "terms"
-          addConstraints [] 
-    (_, _) -> failTypeCheck ("cannot unify " ) -- ++ lhs ++ rhs)
+          addConstraints []
+    (_, _) -> failTypeCheck ("cannot unify ") -- ++ lhs ++ rhs)
 
 -- -- freshHM :: TypeCheck n ty (ty n)
 -- freshHM :: TypeCheck' (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
@@ -295,18 +322,18 @@ instance Applicative (TypeCheck ty n) where
   (<*>) = ap
 
 instance Monad (TypeCheck ty n) where
---   return x = TypeCheck $ \tc -> Right (x, tc)
+  --   return x = TypeCheck $ \tc -> Right (x, tc)
 
---   (>>=) :: TypeCheck a -> (a -> TypeCheck b) -> TypeCheck b
---   g :: TypingContext n -> Either String (a, TypingContext n)
---   TypeCheck g >>= f = TypeCheck $ \tc ->
---     case g tc of
---       Left err -> Left err
---       Right (x, tc') -> runTypeCheck (f x) tc'
-  
---   do
---    x <- TypeCheck g
---    f x
+  --   (>>=) :: TypeCheck a -> (a -> TypeCheck b) -> TypeCheck b
+  --   g :: TypingContext n -> Either String (a, TypingContext n)
+  --   TypeCheck g >>= f = TypeCheck $ \tc ->
+  --     case g tc of
+  --       Left err -> Left err
+  --       Right (x, tc') -> runTypeCheck (f x) tc'
+
+  --   do
+  --    x <- TypeCheck g
+  --    f x
   TypeCheck g >>= f = TypeCheck $ \tc -> do
     (x, tc') <- g tc
     runTypeCheck (f x) tc'

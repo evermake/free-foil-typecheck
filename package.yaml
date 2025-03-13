@@ -28,6 +28,7 @@ dependencies:
   bifunctors:
   containers:
   free-foil: ">= 0.2.0"
+  kind-generics-th: ">= 0.2.3"
 
 ghc-options:
   - -Wall
