@@ -118,20 +118,45 @@ instance
   where
   inferSig scope = \case
     ETrueSig -> return (Term TBool)
+    EFalseSig -> return (Term TBool)
+    ENatSig _ -> return (Term TNat)
+    EAddSig l r -> do
+      check l (Term TNat)
+      check r (Term TNat)
+      return (Term TNat)
+    ESubSig l r -> do
+      check l (Term TNat)
+      check r (Term TNat)
+      return (Term TNat)
+    EIfSig cond thenBranch elseBranch -> do
+      check cond (Term TBool)
+      thenType <- infer thenBranch
+      elseType <- infer elseBranch
+      unless (alphaEquiv (nameMapToScope scope) thenType elseType) $
+        Left "branches of if-expression must have the same type"
+      return thenType
+    EIsZeroSig e -> do
+      check e (Term TNat)
+      return (Term TBool)
+    -- ETypedSig e t -> do
+    --   check e t
+    --   return t
+    -- ELetSig x e ->
     EAppSig t1 t2 ->
       infer t1 >>= \case
         Term (TArrow a b) -> do
           check t2 (Term a)
           return (Term b)
         _ -> Left "not a function"
+    -- ETAppSig e t -> 
     EAbsSig body -> do
       Scoped (FoilPatternAsc x (Term argType)) bodyType <- infer body
       case Foil.assertDistinct x of
         Foil.Distinct -> do
           Term bodyType' <- unsinkType scope bodyType
           return (Term (TArrow argType bodyType'))
-    _ -> Left "Pattern match is not complete" -- TODO: Complete Pattern Match
-
+    -- ETAbsSig pat -> 
+    
 bidirectionalCheck ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty) =>
   Context' ty n ->
