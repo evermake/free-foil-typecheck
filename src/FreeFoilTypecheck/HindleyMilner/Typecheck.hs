@@ -10,7 +10,6 @@ module FreeFoilTypecheck.HindleyMilner.Typecheck where
 
 import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
-import qualified Control.Monad.Foil as FreeFoil
 import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import qualified Data.Bifoldable
@@ -48,7 +47,7 @@ type USubst' = USubst Foil.VoidS
 data TypingContext n = TypingContext
   { tcConstraints :: [Constraint],
     tcSubsts :: [USubst'],
-    tcTypings :: FreeFoil.NameMap n Type',
+    tcTypings :: Foil.NameMap n Type',
     tcFreshId :: Int,
     tcLevels :: IdentLevelMap,
     tcLevel :: Int
