@@ -113,6 +113,7 @@ deriveBitraversable ''MetaVarSig
 -- -- deriving (..., ZipMatchK)
 
 type UType binder typeSig = FreeFoil.AST binder (Sum typeSig MetaVarSig)
+type UScopedType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
 
 -- type ScopedUType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
 
@@ -357,22 +358,21 @@ instance Monad (TypeCheck ty n) where
 -- applySubstsToConstraint :: [USubst' ty] -> Constraint' (ty n) -> Constraint' (ty n)
 -- applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
 
-applySubstToType :: (Foil.Distinct n) => USubst_ ((UType binder typeSig) n) -> (UType binder typeSig) n -> HMType (UType binder typeSig)
-applySubstToType (ident, typ) (toUVarIdent -> Just x)
+applySubstToType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => USubst_ (UType binder typeSig n) -> UType binder typeSig n -> UType binder typeSig n
+applySubstToType (ident, typ) type_@(toUVarIdent -> Just x)
   | ident == x = typ
-  | otherwise = fromUVarIdent x
-applySubstToType _ (FreeFoil.Var x) = FreeFoil.Var x
+  | otherwise = type_
+applySubstToType _ type_@FreeFoil.Var{} = type_
 applySubstToType subst (FreeFoil.Node node) =
   FreeFoil.Node (bimap (applySubstToScopedType subst) (applySubstToType subst) node)
-  where
-    applySubstToScopedType :: (Foil.Distinct n, Foil.Sinkable (FreeFoil.ScopedAST binder body)) =>
-     USubst_ (FreeFoil.ScopedAST binder body n) -> FreeFoil.ScopedAST binder body n -> FreeFoil.ScopedAST binder body n -- FreeFoil.ScopedAST FoilTypePattern TypeSig n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n
-    applySubstToScopedType subst' (FreeFoil.ScopedAST binder body) =
-      case (Foil.assertExt binder, Foil.assertDistinct binder) of
-        (Foil.Ext, Foil.Distinct) ->
-          FreeFoil.ScopedAST binder (applySubstToType (fmap Foil.sink subst') body)
 
-applySubstsToType :: [USubst_ ((UType binder typeSig) n)] -> (HMType (UType binder typeSig)) -> HMType (UType binder typeSig)
+applySubstToScopedType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => USubst_ (UType binder typeSig n) -> UScopedType binder typeSig n -> UScopedType binder typeSig n
+applySubstToScopedType subst' (FreeFoil.ScopedAST binder body) =
+  case (Foil.assertExt binder, Foil.assertDistinct binder) of
+    (Foil.Ext, Foil.Distinct) ->
+      FreeFoil.ScopedAST binder (applySubstToType (fmap Foil.sink subst') body)
+
+applySubstsToType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> UType binder typeSig n -> UType binder typeSig n
 applySubstsToType [] typ = typ
 applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType subst typ)
 
@@ -536,14 +536,30 @@ addConstraints constrs = do
 -- --   enterScope x TNat $
 -- --     reconstructType eBody
 
-allUVarsOfHMType :: HMType (UType binder typeSig) -> [Raw.UVarIdent]
-allUVarsOfHMType (MonoType a) = allUVarsOfType a
-allUVarsOfHMType (PolyType (TypeScheme list ty)) = list ++ allUVarsOfType ty 
+-- let f = λx:X?. (let g = λy:Y?. x in g) in f
+--
+-- g : Y? → X?
+-- g : ∀ α. α → X?                    -- generalize g
+-- let g = λy:Y?. x in g : A? → X?    -- specialize g
+-- f : X? → A? → X?
+-- f : ∀ α β. α → β → α
+-- let f = λx:X?. (let g = λy:Y?. x in g) in f  : B? → C? → B?  -- specialize f
 
-allUVarsOfType :: (UType binder typeSig) n -> [Raw.UVarIdent]
+-- ∀ α β. α → (β → G?) → A? 
+-- local variables: α, β
+-- unification variables: G?, A?
+
+allUVarsOfHMType :: Bifoldable typeSig => HMType (UType binder typeSig) -> [Raw.UVarIdent]
+allUVarsOfHMType (MonoType a) = allUVarsOfType a
+allUVarsOfHMType (PolyType (TypeScheme _list ty)) = allUVarsOfType ty 
+
+allUVarsOfType :: Bifoldable typeSig => UType binder typeSig n -> [Raw.UVarIdent]
 allUVarsOfType (toUVarIdent -> Just ident) = [ident]
 allUVarsOfType (FreeFoil.Var _) = []
-allUVarsOfType (FreeFoil.Node node) = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] node
+allUVarsOfType (FreeFoil.Node node) = bifoldMap allUVarsOfScopedType allUVarsOfType node
+
+allUVarsOfScopedType :: Bifoldable typeSig => UScopedType binder typeSig n -> [Raw.UVarIdent]
+allUVarsOfScopedType (FreeFoil.ScopedAST _binder body) = allUVarsOfType body
 
 -- popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
 -- popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
