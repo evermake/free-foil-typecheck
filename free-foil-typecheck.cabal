@@ -1,6 +1,6 @@
 cabal-version: 1.24
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -31,6 +31,7 @@ custom-setup
 library
   exposed-modules:
       FreeFoilTypecheck.HindleyMilner.Eval
+      FreeFoilTypecheck.HindleyMilner.Inference
       FreeFoilTypecheck.HindleyMilner.Interpret
       FreeFoilTypecheck.HindleyMilner.Parser.Abs
       FreeFoilTypecheck.HindleyMilner.Parser.Lex

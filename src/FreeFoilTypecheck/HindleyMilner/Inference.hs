@@ -43,9 +43,9 @@ newtype Subst n = Subst (Map.Map Raw.UVarIdent (Type n))
 type Subst' = Subst Foil.VoidS
 
 -- Question: how to swap type parameters but implement `Typed` below?
-newtype TypingEnv n m = TypingEnv (Foil.NameMap m (Type n))
+newtype TypingEnv n tn = TypingEnv (Foil.NameMap n (Type tn))
 
-type TypingEnv' n = TypingEnv Foil.VoidS n
+type TypingEnv' n = TypingEnv n Foil.VoidS
 
 class Typed a where
   applySubst :: (Foil.Distinct n) => Subst n -> a n -> a n
@@ -69,7 +69,7 @@ instance Typed Constraint where
 
   freeVars (Constraint (t1, t2)) = Set.union (freeVars t1) (freeVars t2)
 
-instance Typed (TypingEnv Foil.VoidS) where
+instance Typed (TypingEnv n) where
   -- FIXME: TypingEnv is a mapping from binder to type in the empty scope,
   --        but `applySubst` has `Subst` within scope `n` in type definition.
   applySubst s (TypingEnv env) = TypingEnv (fmap (applySubst s) env)
