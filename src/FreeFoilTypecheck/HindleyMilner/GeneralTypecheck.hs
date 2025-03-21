@@ -204,11 +204,24 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
 -- unifyHM :: UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
 -- unifyHM _ _ = undefined
 
-freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
-freshHM = undefined
+-- freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
+-- freshHM = undefined
 
 generalizeHM :: (UType binder typeSig) n -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n ((UType binder typeSig) n)
 generalizeHM _ _ = undefined
+
+
+-- generalizeHM :: (UType binder typeSig) n -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n ((UType binder typeSig) n)
+-- generalizeHM whatTyp xTyp = do
+--   (TypingContext _ substs ctx _) <- get
+--   let whatTyp1 = applySubstsToType substs whatTyp
+--   let ctx' = fmap (applySubstsToType substs) ctx
+--   let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfHMType typ) [] ctx'
+--   let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfHMType whatTyp1)
+--   let whatTyp2 = generalize whatFreeIdents whatTyp1
+--   return whatTyp2
+  -- enterScope xTyp TypeScheme (whatFreeIdents, whatTyp2) (reconstructType eExpr) -- xTyp is not binder but type
+
 
 unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
 unifyHM typ1 typ2 = do
@@ -228,16 +241,16 @@ unifyHM typ1 typ2 = do
         -- `zipMatch` takes out corresponding terms from a node that we need
         --  to unify further.
         Just lr -> do
-          _ <- bitraverse (\t -> failTypeCheck "Unable to unify scoped type") (uncurry unifyHM) lr -- ignores "scopes", only works with "terms"
+          _ <- bitraverse (\_ -> failTypeCheck "Unable to unify scoped type") (uncurry unifyHM) lr -- ignores "scopes", only works with "terms"
           addConstraints []
     (_, _) -> failTypeCheck ("cannot unify ") -- ++ lhs ++ rhs)
 
--- -- freshHM :: TypeCheck n ty (ty n)
--- freshHM :: TypeCheck' (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
--- freshHM = do
---   TypingContext' constraints substs ctx freshId <- get
---   put (TypingContext' constraints substs ctx (freshId + 1))
---   return (fromUVarIdent (makeIdent freshId))
+-- freshHM :: TypeCheck n ty (ty n)
+freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
+freshHM = do
+  TypingContext constraints substs ctx freshId <- get
+  put (TypingContext constraints substs ctx (freshId + 1))
+  return (fromUVarIdent (makeIdent freshId))
 
 -- generalizeHM :: ty n -> HMType ty -> TypeCheck' ty n (ty n)
 -- generalizeHM whatTyp xTyp = do
@@ -253,16 +266,19 @@ unifyHM typ1 typ2 = do
 -- -- forall x0 . forall x1 . x0 -> x1 -> x0
 -- -- >>> generalize ["?b", "?a"] "?a -> ?b -> ?a"
 -- -- forall x0 . forall x1 . x1 -> x0 -> x1
--- generalize :: [Raw.UVarIdent] -> ty n -> HMType ty
+
+generalize :: [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
+generalize _ _= undefined
+-- generalize :: [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
 -- generalize = go Foil.emptyScope
 --   where
---     go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> ty n -> HMType ty
+--     go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
 --     go _ [] type_ = (MonoType type_)
 --     go ctx (x : xs) type_ = Foil.withFresh ctx $ \binder ->
 --       let newScope = Foil.extendScope binder ctx
 --           x' = FreeFoil.Var (Foil.nameOf binder)
 --           type' = applySubstToType (x, x') (Foil.sink type_)
---        in TForAll (FoilTPatternVar binder) (go newScope xs type')
+--        in Polytype (go newScope xs type')
 
 -- -- unify1 :: (HasUVars ty) => Constraint' (ty Foil.VoidS) -> Either String [USubst_ (ty n)]
 -- -- unify1 c =
@@ -341,23 +357,24 @@ instance Monad (TypeCheck ty n) where
 -- applySubstsToConstraint :: [USubst' ty] -> Constraint' (ty n) -> Constraint' (ty n)
 -- applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
 
--- applySubstToType :: (Foil.Distinct n) => USubst_ (ty n) -> ty n -> ty n
--- applySubstToType (ident, typ) (TUVar x)
---   | ident == x = typ
---   | otherwise = TUVar x
--- applySubstToType _ (FreeFoil.Var x) = FreeFoil.Var x
--- applySubstToType subst (FreeFoil.Node node) =
---   FreeFoil.Node (bimap (applySubstToScopedType subst) (applySubstToType subst) node)
---   where
---     applySubstToScopedType :: (Foil.Distinct n, Foil.Sinkable ty) => USubst' ty -> ty n -> ty n -- FreeFoil.ScopedAST FoilTypePattern TypeSig n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n
---     applySubstToScopedType subst' (FreeFoil.ScopedAST binder body) =
---       case (Foil.assertExt binder, Foil.assertDistinct binder) of
---         (Foil.Ext, Foil.Distinct) ->
---           FreeFoil.ScopedAST binder (applySubstToType (fmap Foil.sink subst') body)
+applySubstToType :: (Foil.Distinct n) => USubst_ ((UType binder typeSig) n) -> (UType binder typeSig) n -> HMType (UType binder typeSig)
+applySubstToType (ident, typ) (toUVarIdent -> Just x)
+  | ident == x = typ
+  | otherwise = fromUVarIdent x
+applySubstToType _ (FreeFoil.Var x) = FreeFoil.Var x
+applySubstToType subst (FreeFoil.Node node) =
+  FreeFoil.Node (bimap (applySubstToScopedType subst) (applySubstToType subst) node)
+  where
+    applySubstToScopedType :: (Foil.Distinct n, Foil.Sinkable (FreeFoil.ScopedAST binder body)) =>
+     USubst_ (FreeFoil.ScopedAST binder body n) -> FreeFoil.ScopedAST binder body n -> FreeFoil.ScopedAST binder body n -- FreeFoil.ScopedAST FoilTypePattern TypeSig n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n
+    applySubstToScopedType subst' (FreeFoil.ScopedAST binder body) =
+      case (Foil.assertExt binder, Foil.assertDistinct binder) of
+        (Foil.Ext, Foil.Distinct) ->
+          FreeFoil.ScopedAST binder (applySubstToType (fmap Foil.sink subst') body)
 
--- applySubstsToType :: [USubst_ (ty n)] -> ty n -> ty n
--- applySubstsToType [] typ = typ
--- applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType subst typ)
+applySubstsToType :: [USubst_ ((UType binder typeSig) n)] -> (HMType (UType binder typeSig)) -> HMType (UType binder typeSig)
+applySubstsToType [] typ = typ
+applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType subst typ)
 
 -- applySubstsInSubsts :: [USubst_ (ty n)] -> USubst_ (ty n) -> USubst_ (ty n)
 -- applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
@@ -395,6 +412,9 @@ put new = TypeCheck $ \_old -> Right ((), new)
 --   TypingContext' constraints substs ctx freshId <- get
 --   substs' <- eitherToTypeCheck (unifyWith substs constraints)
 --   put (TypingContext' [] (substs +++ substs') ctx freshId)
+
+enterScope :: Foil.NameBinder n l -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) l a -> TypeCheck (UType binder typeSig) n a
+enterScope _ _ = undefined 
 
 -- enterScope :: Foil.NameBinder n l -> HMType ty -> TypeCheck' ty l a -> TypeCheck' ty n a
 -- enterScope binder type_ code = do
@@ -515,10 +535,15 @@ addConstraints constrs = do
 -- --   addConstraints [(fromTyp, TNat), (toTyp, TNat)]
 -- --   enterScope x TNat $
 -- --     reconstructType eBody
--- allUVarsOfType :: UType binder typeSig n -> [Raw.UVarIdent]
--- allUVarsOfType (toUVarIdent -> Just ident) = [ident]
--- allUVarsOfType (FreeFoil.Var _) = []
--- allUVarsOfType (FreeFoil.Node node) = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] node
+
+allUVarsOfHMType :: HMType (UType binder typeSig) -> [Raw.UVarIdent]
+allUVarsOfHMType (MonoType a) = allUVarsOfType a
+allUVarsOfHMType (PolyType (TypeScheme list ty)) = list ++ allUVarsOfType ty 
+
+allUVarsOfType :: (UType binder typeSig) n -> [Raw.UVarIdent]
+allUVarsOfType (toUVarIdent -> Just ident) = [ident]
+allUVarsOfType (FreeFoil.Var _) = []
+allUVarsOfType (FreeFoil.Node node) = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] node
 
 -- popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
 -- popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
@@ -526,8 +551,8 @@ addConstraints constrs = do
 -- unificationVarIdentsBetween :: Int -> Int -> [Raw.UVarIdent]
 -- unificationVarIdentsBetween a b = map makeIdent [a .. (b - 1)]
 
--- makeIdent :: Int -> Raw.UVarIdent
--- makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
+makeIdent :: Int -> Raw.UVarIdent
+makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 
 -- -- addSubst
 -- --   :: forall e i o i'. Substitution e i o
