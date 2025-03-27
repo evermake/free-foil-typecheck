@@ -151,11 +151,18 @@ instance Monad (TypeCheck (UType binder typeSig) n) where
 -- -- Right Nat
 -- -- >>> inferTypeNewClosed "let twice = (λt. (λx. (t (t x)))) in let add2 = (λx. x + 2) in let bool2int = (λb. if b then 1 else 0) in let not = (λb. if b then false else true) in (twice add2) (bool2int ((twice not) true))"
 -- -- Right Nat
-inferTypeNewClosed :: Exp Foil.VoidS -> Either String ((UType binder typeSig) n)
+inferTypeNewClosed
+  :: (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder typeSig sig, Bitraversable typeSig, FreeFoil.ZipMatch typeSig)
+  => FreeFoil.AST binder sig Foil.VoidS
+  -> TypeCheck (UType binder typeSig) Foil.VoidS (UType binder typeSig Foil.VoidS)
 inferTypeNewClosed expr = do
-  (type', (TypingContext constrs substs _ _)) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0)
+  TypingContext{tcSubsts = substs, tcConstraints = constrs} <- get
+  type' <- reconstructType expr
   substs' <- unify (map (applySubstsToConstraint substs) constrs)
   return (applySubstsToType substs' type')
+
+emptyTypingContext :: TypingContext ty Foil.VoidS
+emptyTypingContext = TypingContext [] [] Foil.emptyNameMap 0
 
 -- type Constraint = (Type', Type')
 
@@ -260,7 +267,7 @@ generalizeHM _ _ = undefined
   -- enterScope xTyp TypeScheme (whatFreeIdents, whatTyp2) (reconstructType eExpr) -- xTyp is not binder but type
 
 
-unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
+unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
 unifyHM typ1 typ2 = do
   case (typ1, typ2) of
     -- Case for unification variables
@@ -339,10 +346,13 @@ generalize _ _= undefined
 
 -- infixr 6 +++
 
-(+++) :: [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)]
+(+++) :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)]
 xs +++ ys = map (applySubstsInSubsts ys) xs ++ ys
 
-unify :: [Constraint' (UType binder typeSig Foil.VoidS)] -> TypeCheck (UType binder typeSig) n ([USubst_ (UType binder typeSig Foil.VoidS)])
+unify
+  :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder)
+  => [Constraint' (UType binder typeSig Foil.VoidS)]
+  -> TypeCheck (UType binder typeSig) n ([USubst_ (UType binder typeSig Foil.VoidS)])
 unify [] = return []
 unify (c : cs) = do
   _ <- uncurry unifyHM c
@@ -367,7 +377,7 @@ unify (c : cs) = do
 
 
 
-applySubstsToConstraint :: [USubst_ (UType binder typeSig n) ] -> Constraint' (UType binder typeSig n) -> Constraint' (UType binder typeSig n)
+applySubstsToConstraint :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n) ] -> Constraint' (UType binder typeSig n) -> Constraint' (UType binder typeSig n)
 applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
 
 applySubstToType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => USubst_ (UType binder typeSig n) -> UType binder typeSig n -> UType binder typeSig n
@@ -388,7 +398,7 @@ applySubstsToType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder
 applySubstsToType [] typ = typ
 applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType subst typ)
 
-applySubstsInSubsts :: [USubst_ (UType binder typeSig n)] -> USubst_ (UType binder typeSig n) -> USubst_ (UType binder typeSig n)
+applySubstsInSubsts :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> USubst_ (UType binder typeSig n) -> USubst_ (UType binder typeSig n)
 applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
 
 -- deriving instance Functor (Foil.NameMap n)
@@ -444,15 +454,15 @@ addConstraints constrs = do
   TypingContext constraints substs ctx freshId <- get
   put (TypingContext (constrs ++ constraints) substs ctx freshId)
 
-addSubsts :: [USubst_ (UType binder typeSig Foil.VoidS)] -> TypeCheck (UType binder typeSig) n ()
+addSubsts :: (Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig Foil.VoidS)] -> TypeCheck (UType binder typeSig) n ()
 addSubsts substs = do
   TypingContext constraints substs' ctx freshId <- get
   put (TypingContext constraints (substs +++ substs') ctx freshId)
 
 reconstructType ::
-  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder tySig sig) =>
+  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder typeSig sig) =>
   FreeFoil.AST binder sig n ->
-  TypeCheck (UType binder typeSig) n (UType binder typeSig n)
+  TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 reconstructType = \case
   FreeFoil.Var x -> lookupVarInTypingContext x
   FreeFoil.Node node -> do
@@ -461,12 +471,12 @@ reconstructType = \case
     inferSigHM node'
 
 reconstructTypeScoped' ::
-  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder tySig sig) =>
-  UScopedType binder sig n ->
+  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder typeSig sig) =>
+  FreeFoil.ScopedAST binder sig n ->
   TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig), UType binder typeSig Foil.VoidS)
 reconstructTypeScoped' = undefined
 
-lookupVarInTypingContext :: Foil.Name n -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
+lookupVarInTypingContext :: Foil.Name n -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 lookupVarInTypingContext x = do
   TypingContext _ _ ctx freshId <- get
   let xTyp = Foil.lookupName x ctx
@@ -480,7 +490,7 @@ updateFreshId freshId = do
   put (TypingContext constrs subst ctx freshId)
 
 
-specializeHM :: HMType (UType binder typeSig) -> Int -> ((UType binder typeSig) n, Int)
+specializeHM :: HMType (UType binder typeSig) -> Int -> (UType binder typeSig Foil.VoidS, Int)
 specializeHM _ _ = undefined
 -- -- use enterScope ...
 
