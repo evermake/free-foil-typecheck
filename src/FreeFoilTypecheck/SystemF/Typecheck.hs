@@ -216,15 +216,10 @@ instance
       return et
     ELetSig e body -> do
       a <- infer e
-      Scoped c d <- infer (body (Just a))
-      let scope' = extendContextPattern c a scope
-      let new_body = \jt -> do
-        let CheckInfer ch (Scoped pat term) = body jt
-          term' <- unsinkType scope' term
-          return (CheckInfer ch (Scoped pat term'))
-      inferSig scope' new_body
-
-
+      Scoped c bodyType <- infer (body (Just a))
+      case Foil.assertDistinct c of
+        Foil.Distinct ->
+          unsinkType scope bodyType
 
     --  Γ ⊢ t₁ => T₁   Γ, x : T₁ ⊢ t₂ => T₂
     -- ————————————————————————————————————
