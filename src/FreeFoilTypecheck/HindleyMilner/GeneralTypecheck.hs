@@ -18,6 +18,7 @@
 {-# LANGUAGE StarIsType #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
 module FreeFoilTypecheck.HindleyMilner.GeneralTypecheck where
@@ -44,24 +45,6 @@ import FreeFoilTypecheck.HindleyMilner.Syntax
 import qualified GHC.Generics as GHC
 import Generics.Kind.TH (deriveGenericK)
 
--- -- $setup
--- -- >>> :set -XOverloadedStrings
-
--- -- >>> inferTypeNewClosed "λx. x"
--- -- Right ?u0 -> ?u0
--- -- >>> inferTypeNewClosed "λx. x + 1"
--- -- Right Nat -> Nat
--- -- >>> inferTypeNewClosed "let f = (λx. λy. let g = x y in g) in f (λz. z) 0"
--- -- Right Nat
--- -- >>> inferTypeNewClosed "let twice = (λt. (λx. (t (t x)))) in let add2 = (λx. x + 2) in let bool2int = (λb. if b then 1 else 0) in let not = (λb. if b then false else true) in (twice add2) (bool2int ((twice not) true))"
--- -- Right Nat
--- inferTypeNewClosed :: Exp Foil.VoidS -> Either String (ty n)
--- inferTypeNewClosed expr = do
---   (type', TypingContext' constrs substs _ _) <- runTypeCheck (reconstructType' expr) (TypingContext' [] [] Foil.emptyNameMap 0)
---   substs' <- unify (map (applySubstsToConstraint substs) constrs)
---   return (applySubstsToType substs' type')
-
--- type Constraint = (Type', Type')
 
 type Constraint' ty = (ty, ty)
 
@@ -123,6 +106,59 @@ fromUVarIdent x = FreeFoil.Node (R2 (MetaVarSig x))
 toUVarIdent :: UType binder typeSig n -> Maybe Raw.UVarIdent
 toUVarIdent (FreeFoil.Node (R2 (MetaVarSig x))) = Just x
 toUVarIdent _ = Nothing
+
+data TypingContext ty n = TypingContext
+  { tcConstraints :: [Constraint' (ty Foil.VoidS)],
+    tcSubsts :: [USubst_ (ty Foil.VoidS)],
+    tcTypings :: Foil.NameMap n (HMType ty),
+    tcFreshId :: Int
+  }
+
+newtype TypeCheck ty n a = TypeCheck {runTypeCheck :: TypingContext ty n -> Either String (a, TypingContext ty n)}
+  deriving (Functor)
+
+failTypeCheck :: String -> TypeCheck (UType binder typeSig) n a
+failTypeCheck msg = TypeCheck (\_ctx -> Left msg)
+
+instance Applicative (TypeCheck (UType binder typeSig) n) where
+  pure x = TypeCheck $ \tc -> Right (x, tc)
+  (<*>) = ap
+
+instance Monad (TypeCheck (UType binder typeSig) n) where
+  --   return x = TypeCheck $ \tc -> Right (x, tc)
+
+  --   (>>=) :: TypeCheck a -> (a -> TypeCheck b) -> TypeCheck b
+  --   g :: TypingContext n -> Either String (a, TypingContext n)
+  --   TypeCheck g >>= f = TypeCheck $ \tc ->
+  --     case g tc of
+  --       Left err -> Left err
+  --       Right (x, tc') -> runTypeCheck (f x) tc'
+
+  --   do
+  --    x <- TypeCheck g
+  --    f x
+  TypeCheck g >>= f = TypeCheck $ \tc -> do
+    (x, tc') <- g tc
+    runTypeCheck (f x) tc'
+-- -- $setup
+-- -- >>> :set -XOverloadedStrings
+
+-- -- >>> inferTypeNewClosed "λx. x"
+-- -- Right ?u0 -> ?u0
+-- -- >>> inferTypeNewClosed "λx. x + 1"
+-- -- Right Nat -> Nat
+-- -- >>> inferTypeNewClosed "let f = (λx. λy. let g = x y in g) in f (λz. z) 0"
+-- -- Right Nat
+-- -- >>> inferTypeNewClosed "let twice = (λt. (λx. (t (t x)))) in let add2 = (λx. x + 2) in let bool2int = (λb. if b then 1 else 0) in let not = (λb. if b then false else true) in (twice add2) (bool2int ((twice not) true))"
+-- -- Right Nat
+inferTypeNewClosed :: Exp Foil.VoidS -> Either String ((UType binder typeSig) n)
+inferTypeNewClosed expr = do
+  (type', (TypingContext constrs substs _ _)) <- runTypeCheck (reconstructType expr) (TypingContext [] [] Foil.emptyNameMap 0)
+  substs' <- unify (map (applySubstsToConstraint substs) constrs)
+  return (applySubstsToType substs' type')
+
+-- type Constraint = (Type', Type')
+
 
 class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (sig :: K.Type -> K.Type -> K.Type) where
   inferSigHM ::
@@ -228,11 +264,11 @@ unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig) => UType binder ty
 unifyHM typ1 typ2 = do
   case (typ1, typ2) of
     -- Case for unification variables
-    (toUVarIdent -> Just x, r) -> addConstraints [(fromUVarIdent x, r)]
-    (l, toUVarIdent -> Just x) -> addConstraints [(fromUVarIdent x, l)]
+    (toUVarIdent -> Just x, r) -> addSubsts [(x, r)]
+    (l, toUVarIdent -> Just x) -> addSubsts [(x, l)]
     -- Case for Free Foil variables (not supported for now)
     (FreeFoil.Var x, FreeFoil.Var y)
-      | x == y -> addConstraints []
+      | x == y -> addSubsts []
     -- Case of non-trivial arbitrary nodes
     (FreeFoil.Node l, FreeFoil.Node r) ->
       -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
@@ -243,7 +279,7 @@ unifyHM typ1 typ2 = do
         --  to unify further.
         Just lr -> do
           _ <- bitraverse (\_ -> failTypeCheck "Unable to unify scoped type") (uncurry unifyHM) lr -- ignores "scopes", only works with "terms"
-          addConstraints []
+          addSubsts []
     (_, _) -> failTypeCheck ("cannot unify ") -- ++ lhs ++ rhs)
 
 -- freshHM :: TypeCheck n ty (ty n)
@@ -303,15 +339,16 @@ generalize _ _= undefined
 
 -- infixr 6 +++
 
--- (+++) :: [USubst_ (ty n)] -> [USubst_ (ty n)] -> [USubst_ (ty n)]
--- xs +++ ys = map (applySubstsInSubsts ys) xs ++ ys
+(+++) :: [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)]
+xs +++ ys = map (applySubstsInSubsts ys) xs ++ ys
 
--- unify :: [Constraint' (UType binder typeSig Foil.VoidS)] -> Either String [USubst_ (UType binder typeSig n)]
--- unify [] = return []
--- unify (c : cs) = do
---   substs <- unifyHM c
---   substs' <- unify (map (applySubstsToConstraint substs) cs)
---   return (substs +++ substs')
+unify :: [Constraint' (UType binder typeSig Foil.VoidS)] -> TypeCheck (UType binder typeSig) n ([USubst_ (UType binder typeSig Foil.VoidS)])
+unify [] = return []
+unify (c : cs) = do
+  _ <- uncurry unifyHM c
+  TypingContext _ substs _ _ <- get
+  substs' <- unify (map (applySubstsToConstraint substs) cs)
+  return (substs +++ substs')
 
 -- unifyWith ::
 --   [USubst_ (UType binder typeSig n)] ->
@@ -322,41 +359,16 @@ generalize _ _= undefined
 -- -- newtype TypeCheck n a = TypeCheck {runTypeCheck' :: TypingContext n -> Either String (a, TypingContext n)}
 -- --   deriving (Functor)
 
-newtype TypeCheck ty n a = TypeCheck {runTypeCheck :: TypingContext ty n -> Either String (a, TypingContext ty n)}
-  deriving (Functor)
-
-failTypeCheck :: String -> TypeCheck (UType binder typeSig) n a
-failTypeCheck msg = TypeCheck (\_ctx -> Left msg)
-
 -- instance Functor (TypeCheck n) where
 --   fmap f (TypeCheck g) = TypeCheck $ \tc ->
 --     case g tc of
 --       Left err -> Left err
 --       Right (x, tc') -> Right (f x, tc')
 
-instance Applicative (TypeCheck ty n) where
-  pure x = TypeCheck $ \tc -> Right (x, tc)
-  (<*>) = ap
 
-instance Monad (TypeCheck ty n) where
-  --   return x = TypeCheck $ \tc -> Right (x, tc)
 
-  --   (>>=) :: TypeCheck a -> (a -> TypeCheck b) -> TypeCheck b
-  --   g :: TypingContext n -> Either String (a, TypingContext n)
-  --   TypeCheck g >>= f = TypeCheck $ \tc ->
-  --     case g tc of
-  --       Left err -> Left err
-  --       Right (x, tc') -> runTypeCheck (f x) tc'
-
-  --   do
-  --    x <- TypeCheck g
-  --    f x
-  TypeCheck g >>= f = TypeCheck $ \tc -> do
-    (x, tc') <- g tc
-    runTypeCheck (f x) tc'
-
--- applySubstsToConstraint :: [USubst' ty] -> Constraint' (ty n) -> Constraint' (ty n)
--- applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
+applySubstsToConstraint :: [USubst_ (UType binder typeSig n) ] -> Constraint' (UType binder typeSig n) -> Constraint' (UType binder typeSig n)
+applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
 
 applySubstToType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => USubst_ (UType binder typeSig n) -> UType binder typeSig n -> UType binder typeSig n
 applySubstToType (ident, typ) type_@(toUVarIdent -> Just x)
@@ -376,19 +388,19 @@ applySubstsToType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder
 applySubstsToType [] typ = typ
 applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType subst typ)
 
--- applySubstsInSubsts :: [USubst_ (ty n)] -> USubst_ (ty n) -> USubst_ (ty n)
--- applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
+applySubstsInSubsts :: [USubst_ (UType binder typeSig n)] -> USubst_ (UType binder typeSig n) -> USubst_ (UType binder typeSig n)
+applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
 
 -- deriving instance Functor (Foil.NameMap n)
 
 -- deriving instance Foldable (Foil.NameMap n)
 
-data TypingContext ty n = TypingContext
-  { tcConstraints :: [Constraint' (ty Foil.VoidS)],
-    tcSubsts :: [USubst_ (ty Foil.VoidS)],
-    tcTypings :: Foil.NameMap n (HMType ty),
-    tcFreshId :: Int
-  }
+-- data TypingContext ty n = TypingContext
+--   { tcConstraints :: [Constraint' (ty Foil.VoidS)],
+--     tcSubsts :: [USubst_ (ty Foil.VoidS)],
+--     tcTypings :: Foil.NameMap n (HMType ty),
+--     tcFreshId :: Int
+--   }
 
 -- -- data TypingContext n = TypingContext
 -- --   { tcConstraints' :: [Constraint],
@@ -427,41 +439,49 @@ enterScope _ _ = undefined
 --   put (TypingContext' constraints'' substs'' ctx''' freshId'')
 --   return x
 
-addConstraints :: [Constraint' (ty Foil.VoidS)] -> TypeCheck ty n ()
+addConstraints :: [Constraint' (UType binder typeSig Foil.VoidS)] -> TypeCheck (UType binder typeSig) n ()
 addConstraints constrs = do
   TypingContext constraints substs ctx freshId <- get
   put (TypingContext (constrs ++ constraints) substs ctx freshId)
 
--- reconstructType' ::
---   (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder ty sig) =>
---   FreeFoil.AST binder sig n ->
---   TypeCheck' (FreeFoil.AST binder typeSig) n (FreeFoil.AST binder typeSig n)
--- reconstructType' = \case
---   FreeFoil.Var x -> lookupVarInTypingContext x
---   FreeFoil.Node node -> do
---     -- :: TypeCheck' ty n (sig (HMType ty, ty Foil.VoidS) (ty Foil.VoidS))
---     node' <- bitraverse reconstructTypeScoped' reconstructType' node
---     inferSigHM node'
+addSubsts :: [USubst_ (UType binder typeSig Foil.VoidS)] -> TypeCheck (UType binder typeSig) n ()
+addSubsts substs = do
+  TypingContext constraints substs' ctx freshId <- get
+  put (TypingContext constraints (substs +++ substs') ctx freshId)
 
--- reconstructTypeScoped' ::
---   (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder tySig sig) =>
---   FreeFoil.AST binder sig n ->
---   TypeCheck' (FreeFoil.AST binder typeSig) n (HMType (FreeFoil.AST binder typeSig), FreeFoil.AST binder typeSig Foil.VoidS)
--- reconstructTypeScoped' = undefined
+reconstructType ::
+  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder tySig sig) =>
+  FreeFoil.AST binder sig n ->
+  TypeCheck (UType binder typeSig) n (UType binder typeSig n)
+reconstructType = \case
+  FreeFoil.Var x -> lookupVarInTypingContext x
+  FreeFoil.Node node -> do
+    -- :: TypeCheck' ty n (sig (HMType ty, ty Foil.VoidS) (ty Foil.VoidS))
+    node' <- bitraverse reconstructTypeScoped' reconstructType node
+    inferSigHM node'
 
--- lookupVarInTypingContext :: TypeCheck' ty n (ty n)
--- lookupVarInTypingContext = do
---   TypingContext' _ _ ctx freshId <- get
---   let xTyp = Foil.lookupName x ctx
---   let (specTyp, freshId2) = specializeHM xTyp freshId
---   updateFreshId freshId2
---   return specTyp
+reconstructTypeScoped' ::
+  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder tySig sig) =>
+  UScopedType binder sig n ->
+  TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig), UType binder typeSig Foil.VoidS)
+reconstructTypeScoped' = undefined
 
--- updateFreshId :: Int -> TypeCheck' ty n ()
--- updateFreshId freshId = do
---   TypingContext' constrs subst ctx _ <- get
---   put (TypingContext' constraints substs ctx freshId)
+lookupVarInTypingContext :: Foil.Name n -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
+lookupVarInTypingContext x = do
+  TypingContext _ _ ctx freshId <- get
+  let xTyp = Foil.lookupName x ctx
+  let (specTyp, freshId2) = specializeHM xTyp freshId
+  updateFreshId freshId2
+  return specTyp
 
+updateFreshId :: Int -> TypeCheck (UType binder typeSig) n ()
+updateFreshId freshId = do
+  TypingContext constrs subst ctx _ <- get
+  put (TypingContext constrs subst ctx freshId)
+
+
+specializeHM :: HMType (UType binder typeSig) -> Int -> ((UType binder typeSig) n, Int)
+specializeHM _ _ = undefined
 -- -- use enterScope ...
 
 -- -- freshTypeVar :: TypeCheck' ty n (ty n)

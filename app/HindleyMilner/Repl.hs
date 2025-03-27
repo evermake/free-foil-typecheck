@@ -4,7 +4,7 @@ import Control.Monad.Foil (emptyScope)
 import FreeFoilTypecheck.HindleyMilner.Eval
 import FreeFoilTypecheck.HindleyMilner.Parser.Par
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed)
-import FreeFoilTypecheck.HindleyMilner.Typecheck
+import FreeFoilTypecheck.HindleyMilner.GeneralTypecheck
 
 main :: IO ()
 main = do
