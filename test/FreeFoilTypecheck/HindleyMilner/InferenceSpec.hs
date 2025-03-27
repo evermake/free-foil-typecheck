@@ -1,12 +1,12 @@
-module FreeFoilTypecheck.HindleyMilner.TypecheckSpec where
+module FreeFoilTypecheck.HindleyMilner.InferenceSpec where
 
 import Control.Monad (forM_)
 import Data.List
 import qualified Data.Set as Set
+import FreeFoilTypecheck.HindleyMilner.Inference (alphaEquivPolyTypes, evalTypeInferencer, freeVars, generalizeWithIdents, inferTypeClosed)
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed, toTypeClosed)
-import FreeFoilTypecheck.HindleyMilner.Typecheck (allUVarsOfType, alphaEquivPolyTypes, evalTypeCheck, generalize, inferTypeNewClosed)
 import System.Directory
 import System.FilePath
 import Test.Hspec
@@ -32,7 +32,7 @@ isTypeError _ = False
 
 testFilesInDir :: FilePath -> IO [FilePath]
 testFilesInDir dir = do
-  let isTestFile = \f -> return $ takeExtension f == ".lam"
+  let isTestFile f = return $ takeExtension f == ".lam"
   dirWalk isTestFile dir
 
 dirWalk :: (FilePath -> IO Bool) -> FilePath -> IO [FilePath]
@@ -46,21 +46,16 @@ dirWalk filefunc top = do
       return $ concat paths
     else do
       included <- filefunc top
-      return $
-        if included
-          then [top]
-          else []
+      return ([top | included])
 
 programTypesMatch :: String -> String -> Either String Bool
 programTypesMatch actual expected = do
   typeExpected <- toTypeClosed <$> pType tokensExpected
-  let vars = Set.toList (allUVarsOfType typeExpected)
-  let genExpected = generalize vars typeExpected
+  let typeExpectedGeneral = generalizeWithIdents (Set.toList (freeVars typeExpected)) typeExpected
   exprActual <- toExpClosed <$> pExp tokensActual
-  typeActual <- inferTypeNewClosed exprActual
-  let vars' = Set.toList (allUVarsOfType typeActual)
-  let genActual = generalize vars' typeActual
-  case evalTypeCheck $ alphaEquivPolyTypes genActual genExpected of
+  typeActual <- inferTypeClosed exprActual
+  let typeActualGeneral = generalizeWithIdents (Set.toList (freeVars typeActual)) typeActual
+  case evalTypeInferencer $ alphaEquivPolyTypes typeActualGeneral typeExpectedGeneral of
     Left err -> Left err
     Right True -> Right True
     Right False ->
