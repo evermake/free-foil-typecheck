@@ -15,6 +15,7 @@ import Control.Monad.Foil.TH
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.TH
 import Data.Bifunctor.TH
+import Data.Bifunctor.Sum
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.String (IsString (..))

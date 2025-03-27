@@ -98,6 +98,18 @@ deriveBitraversable ''MetaVarSig
 type UType binder typeSig = FreeFoil.AST binder (Sum typeSig MetaVarSig)
 type UScopedType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
 
+instance Show (UType FoilTypePattern TypeSig n) where
+  show = show . fromUType
+    where
+      fromUType :: UType FoilTypePattern TypeSig n -> Type n
+      fromUType = \case
+        FreeFoil.Var x -> FreeFoil.Var x
+        FreeFoil.Node (L2 node) -> FreeFoil.Node (bimap fromUTypeScoped fromUType node)
+        FreeFoil.Node (R2 (MetaVarSig metavar)) -> FreeFoil.Node (TUVarSig metavar)
+    
+      fromUTypeScoped :: UScopedType FoilTypePattern TypeSig n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n
+      fromUTypeScoped (FreeFoil.ScopedAST binder body) = FreeFoil.ScopedAST binder (fromUType body)
+
 -- type ScopedUType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
 
 fromUVarIdent :: Raw.UVarIdent -> UType binder typeSig n
@@ -152,14 +164,21 @@ instance Monad (TypeCheck (UType binder typeSig) n) where
 -- -- >>> inferTypeNewClosed "let twice = (λt. (λx. (t (t x)))) in let add2 = (λx. x + 2) in let bool2int = (λb. if b then 1 else 0) in let not = (λb. if b then false else true) in (twice add2) (bool2int ((twice not) true))"
 -- -- Right Nat
 inferTypeNewClosed
-  :: (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder typeSig sig, Bitraversable typeSig, FreeFoil.ZipMatch typeSig)
+  :: (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig, Bitraversable typeSig, FreeFoil.ZipMatch typeSig)
   => FreeFoil.AST binder sig Foil.VoidS
-  -> TypeCheck (UType binder typeSig) Foil.VoidS (UType binder typeSig Foil.VoidS)
+  -> TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = do
   TypingContext{tcSubsts = substs, tcConstraints = constrs} <- get
   type' <- reconstructType expr
   substs' <- unify (map (applySubstsToConstraint substs) constrs)
   return (applySubstsToType substs' type')
+
+-- >>> testInferTypeNewClosed "1 + 2"
+-- Right Nat
+-- >>> testInferTypeNewClosed "1 + true"
+-- Left "cannot unify "
+testInferTypeNewClosed :: Exp Foil.VoidS -> Either String (UType FoilTypePattern TypeSig Foil.VoidS)
+testInferTypeNewClosed e = fst <$> runTypeCheck (inferTypeNewClosed e) emptyTypingContext
 
 emptyTypingContext :: TypingContext ty Foil.VoidS
 emptyTypingContext = TypingContext [] [] Foil.emptyNameMap 0
@@ -460,9 +479,9 @@ addSubsts substs = do
   put (TypingContext constraints (substs +++ substs') ctx freshId)
 
 reconstructType ::
-  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.AST binder sig n ->
-  TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
+  TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 reconstructType = \case
   FreeFoil.Var x -> lookupVarInTypingContext x
   FreeFoil.Node node -> do
@@ -471,9 +490,9 @@ reconstructType = \case
     inferSigHM node'
 
 reconstructTypeScoped' ::
-  (Foil.CoSinkable binder, Bitraversable sig, HMTypingSig binder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.ScopedAST binder sig n ->
-  TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig), UType binder typeSig Foil.VoidS)
+  TypeCheck (UType typeBinder typeSig) n (HMType (UType typeBinder typeSig), UType typeBinder typeSig Foil.VoidS)
 reconstructTypeScoped' = undefined
 
 lookupVarInTypingContext :: Foil.Name n -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
