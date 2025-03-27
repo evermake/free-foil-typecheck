@@ -105,7 +105,7 @@ class
   --   TArrow a b <- infer t1
   --   check t2 a
 
-  
+
   --      Γ ⊢ t₁ : A
   --   Γ, x : A ⊢ t₂ : B
   -- ———————————————————————— T-Let
@@ -135,7 +135,7 @@ class
     ty n -> -- type
     Either String () -- type
   checkSig = defaultCheckSig
-  
+
   inferSig ::
     (Foil.Distinct n) =>
     Context' ty n -> -- context
@@ -210,10 +210,20 @@ instance
     EIsZeroSig e -> do
       check e (Term TNat)
       return (Term TBool)
-    -- ETypedSig e t -> do
-    --   t' <- check t (Term TType)
-    --   check e t'
-    --   return t'
+    ETypedSig e t  -> do
+      et <- infer e
+      check t et
+      return et
+    ELetSig e body -> do
+      a <- infer e
+      Scoped c d <- infer (body (Just a))
+      let scope' = extendContextPattern c a scope
+      let new_body = \jt -> do
+        let CheckInfer ch (Scoped pat term) = body jt
+          term' <- unsinkType scope' term
+          return (CheckInfer ch (Scoped pat term'))
+      inferSig scope' new_body
+
 
 
     --  Γ ⊢ t₁ => T₁   Γ, x : T₁ ⊢ t₂ => T₂
@@ -244,7 +254,7 @@ instance
           Term bodyType' <- unsinkType scope bodyType
           return (Term (TArrow argType bodyType'))
     -- ETAbsSig body -> 
-    
+
 bidirectionalCheck ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty, HasExactlyOneBinder binder) =>
   Context' ty n ->
@@ -321,11 +331,11 @@ bidirectionalCheckInferScoped scope (FreeFoil.ScopedAST binder body) =
             -- TODO: check binder' against binder
             ty <- extractTypeFromBinder binder mbinderType
             case Foil.unifyPatterns binder binder' of
-              Foil.SameNameBinders binders -> do
+              Foil.SameNameBinders _binders -> do
                 let scope' = Foil.sink <$> Foil.addNameBinder (extractExactlyOneBinder binder') ty scope
                 ci <- bidirectionaCheckInfer scope' body
                 check ci expectedType
-              Foil.RenameLeftNameBinder binders renameL ->
+              Foil.RenameLeftNameBinder _binders renameL ->
                 case (Foil.assertExt binder', Foil.assertDistinct binder') of
                   (Foil.Ext, Foil.Distinct) -> do
                     let scope' = Foil.sink <$> Foil.addNameBinder (extractExactlyOneBinder binder') ty scope
