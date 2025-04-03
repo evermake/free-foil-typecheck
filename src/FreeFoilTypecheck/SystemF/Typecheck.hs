@@ -184,6 +184,14 @@ instance
       Term (TForAll x bodyType) ->
         check (body (Just (Term TType))) (Scoped x (Term bodyType))
       _ -> Left "unexpected type abstraction"
+    ETAppSig e t -> \term -> do
+      check t (Term TType)
+      case infer e of
+        Right (Term (TForAll x bodyType)) -> do
+          check term (Scoped x (Term bodyType))
+        _ -> Left "expected a type abstraction"
+      check e term
+
     sig -> defaultCheckSig scope sig
       -- _ -> ...
     -- ..
@@ -224,16 +232,6 @@ instance
     --  Γ ⊢ t₁ => T₁   Γ, x : T₁ ⊢ t₂ => T₂
     -- ————————————————————————————————————
     --  Γ ⊢ let x = t₁ in t₂ => T₂
-    -- ELetSig e body -> do
-    --   Scoped (FoilPatternAsc x (Term argType)) bodyType <- infer body
-    --   if alphaEquiv (Foil.nameMapToScope scope) t1 (Term argType)
-    --     then
-    --       case Foil.assertDistinct x of
-    --         Foil.Distinct -> do
-    --           Term bodyType' <- unsinkType scope bodyType
-    --           return (Term (TArrow argType bodyType'))
-    --     else
-    --       Left "t1 ≠ argType"
 
     EAppSig t1 t2 ->
       infer t1 >>= \case
@@ -241,14 +239,13 @@ instance
           check t2 (Term a)
           return (Term b)
         _ -> Left "not a function"
-    -- ETAppSig e t -> 
     EAbsSig body -> do
       Scoped (FoilPatternAsc x (Term argType)) bodyType <- infer (body Nothing)
       case Foil.assertDistinct x of
         Foil.Distinct -> do
           Term bodyType' <- unsinkType scope bodyType
           return (Term (TArrow argType bodyType'))
-    -- ETAbsSig body -> 
+
 
 bidirectionalCheck ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty, HasExactlyOneBinder binder) =>
