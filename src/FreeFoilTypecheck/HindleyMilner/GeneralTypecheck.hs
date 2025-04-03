@@ -58,7 +58,7 @@ type USubst_ tyn = (Raw.UVarIdent, tyn)
 -- -- ∀ x₁ x₂ … xₙ. T
 -- -- Type scheme (a.k.a. polytype).
 data TypeScheme ty where
-  TypeScheme :: [Foil.NameBinder n Foil.VoidS] -> ty n -> TypeScheme ty --Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
+  TypeScheme :: Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty --Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
 
 data HMType ty
   = MonoType (ty Foil.VoidS)
@@ -331,16 +331,16 @@ freshHM = do
 -- -- forall x0 . forall x1 . x1 -> x0 -> x1
 
 generalize :: [Raw.UVarIdent] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
-generalize _ (MonoType ty) = (Monotype ty)
-generalize = go Foil.emptyScope
-  where
-    go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
-    go _ [] type_ = type_
-    go ctx (x : xs) (PolyType (TypeScheme binders type_)) = Foil.withFresh ctx $ \binder ->
-      let newScope = Foil.extendScope binder ctx
-          x' = FreeFoil.Var (Foil.nameOf binder)
-          type' = applySubstToType (x, x') (Foil.sink type_)
-       in  (go newScope xs (PolyType (TypeScheme (binders ++ binder) type')))
+generalize = undefined -- go Foil.emptyScope
+  -- where
+  --   go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
+  --   go _ _ (MonoType ty) = MonoType ty
+  --   go _ [] type_ = type_
+  --   go ctx (x : xs) (PolyType (TypeScheme binders type_)) = Foil.withFresh ctx $ \binder ->
+  --     let newScope = Foil.extendScope binder ctx
+  --         x' = FreeFoil.Var (Foil.nameOf binder)
+  --         type' = applySubstToType (x, x') (Foil.sink type_)
+  --      in  (go newScope xs (PolyType (TypeScheme (binders ++ binder) type')))
 -- generalize :: [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
 -- generalize = go Foil.emptyScope
 --   where
@@ -488,7 +488,7 @@ addSubsts substs = do
   put (TypingContext constraints (substs +++ substs') ctx freshId)
 
 reconstructType ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bitraversable sig, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.AST binder sig n ->
   TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 reconstructType = \case
@@ -506,7 +506,7 @@ reconstructTypeScoped' _ = undefined
   
 
 
-lookupVarInTypingContext :: Foil.Name n -> TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
+lookupVarInTypingContext :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => Foil.Name n -> TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 lookupVarInTypingContext x = do
   TypingContext _ _ ctx freshId <- get
   let xTyp = Foil.lookupName x ctx
@@ -520,13 +520,18 @@ updateFreshId freshId = do
   put (TypingContext constrs subst ctx freshId)
 
 
-specializeHM :: HMType (UType typeBinder typeSig) -> Int -> (UType typeBinder typeSig Foil.VoidS, Int)
-specializeHM (PolyType (TypeScheme list ty)) freshId = go list ty freshId
+specializeHM :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => HMType (UType typeBinder typeSig) -> Int -> (UType typeBinder typeSig Foil.VoidS, Int)
+specializeHM (PolyType (TypeScheme list ty)) freshId = go Foil.emptyScope list ty freshId
   where 
-    go :: [Foil.NameBinder n Foil.VoidS] -> UType typeBinder typeSig n -> Int -> (UType typeBinder typeSig Foil.VoidS, Int)
-    go [] ty freshId = (ty, freshId)
-    go (binder:bs) ty freshId = let subst = Foil.addSubst Foil.identitySubst binder (fromUVarIdent (makeIdent freshId))
-                             in (FreeFoil.substitute Foil.emptyScope subst ty, freshId + 1)
+    go :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable typeBinder) => Foil.Scope n -> Foil.NameBinderList n l -> UType typeBinder typeSig l -> Int -> (UType typeBinder typeSig n, Int)
+    go scope Foil.NameBinderListEmpty ty freshId = (ty, freshId)
+    go scope (Foil.NameBinderListCons binder bs) ty freshId =
+      case Foil.assertDistinct binder of
+        Foil.Distinct -> 
+          let subst = Foil.addSubst Foil.identitySubst binder (fromUVarIdent (makeIdent freshId))
+              scope' = Foil.extendScope binder scope
+              (ty', freshId') = go scope' bs ty (freshId + 1)
+          in (FreeFoil.substitute scope subst ty', freshId')
 specializeHM (MonoType ty) freshId = (ty, freshId)
 
 -- -- use enterScope ...
