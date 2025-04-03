@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 -- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -32,6 +33,7 @@ import qualified Control.Monad.Free.Foil as FreeFoil
 -- import qualified Data.Foldable as F
 -- import qualified Data.IntMap as IntMap
 
+import qualified Data.IntMap as IntMap
 import Control.Monad.Free.Foil.Generic (genericZipMatch2)
 import qualified Control.Monad.Free.Foil.Generic as FreeFoil
 import Data.Bifoldable
@@ -128,6 +130,14 @@ data TypingContext ty n = TypingContext
 
 newtype TypeCheck ty n a = TypeCheck {runTypeCheck :: TypingContext ty n -> Either String (a, TypingContext ty n)}
   deriving (Functor)
+
+localTypingContext
+  :: (TypingContext ty n -> TypingContext ty l)
+  -> (TypingContext ty l -> TypingContext ty n)
+  -> TypeCheck ty l a -> TypeCheck ty n a
+localTypingContext f f' (TypeCheck g) = TypeCheck $ \ctx -> do
+  (x, ctx') <- g (f ctx)
+  return (x, f' ctx')
 
 failTypeCheck :: String -> TypeCheck (UType binder typeSig) n a
 failTypeCheck msg = TypeCheck (\_ctx -> Left msg)
@@ -464,7 +474,14 @@ put new = TypeCheck $ \_old -> Right ((), new)
 --   put (TypingContext' [] (substs +++ substs') ctx freshId)
 
 enterScope :: Foil.NameBinder n l -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) l a -> TypeCheck (UType binder typeSig) n a
-enterScope _ _ = undefined 
+enterScope x type_ action =
+  localTypingContext
+    (\ctx@TypingContext{..} -> TypingContext { tcTypings = Foil.addNameBinder x type_ tcTypings, .. } )
+    (\ctx@TypingContext{..} -> TypingContext { tcTypings = popNameBinder x tcTypings, .. } )
+    action
+
+popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
+popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
 
 -- enterScope :: Foil.NameBinder n l -> HMType ty -> TypeCheck' ty l a -> TypeCheck' ty n a
 -- enterScope binder type_ code = do
@@ -502,8 +519,11 @@ reconstructTypeScoped' ::
   (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.ScopedAST binder sig n ->
   TypeCheck (UType typeBinder typeSig) n (HMType (UType typeBinder typeSig), UType typeBinder typeSig Foil.VoidS)
-reconstructTypeScoped' _ = undefined
-  
+reconstructTypeScoped' (FreeFoil.ScopedAST binder body) = do
+  _
+  -- type_ <- freshMonoType type
+  -- enterScope binder type_ $ do
+  --   reconstructType' body
 
 
 lookupVarInTypingContext :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => Foil.Name n -> TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
