@@ -27,7 +27,7 @@ module FreeFoilTypecheck.HindleyMilner.GeneralTypecheck where
 import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
 -- import qualified Control.Monad.Foil as FreeFoil
--- import qualified Control.Monad.Foil.Internal as Foil
+import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 -- import qualified Data.Foldable as F
 -- import qualified Data.IntMap as IntMap
@@ -58,7 +58,7 @@ type USubst_ tyn = (Raw.UVarIdent, tyn)
 -- -- ∀ x₁ x₂ … xₙ. T
 -- -- Type scheme (a.k.a. polytype).
 data TypeScheme ty where
-  TypeScheme :: Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
+  TypeScheme :: [Foil.NameBinder n Foil.VoidS] -> ty n -> TypeScheme ty --Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
 
 data HMType ty
   = MonoType (ty Foil.VoidS)
@@ -248,11 +248,11 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       return ty
     ENatSig _ -> do
       return (injectUType TNat)
-    EForSig _ _ _ -> undefined -- fromType toType bodyType -> do
-    -- do
-    -- fromType `isExpectedToBe` (injectUType TNat)
-    -- toType `isExpectedToBe` (injectUType TNat)
-    -- return bodyType
+    EForSig _ _ _ -> undefined --fromType toType bodyType -> do
+      -- _ <- unifyHM fromType (injectUType TNat)
+      -- _ <- unifyHM toType (injectUType TNat)
+      -- (FreeFoil.Node (HMty ty)) <- bodyType
+      -- return ty
     EAbsSig _ -> undefined
     ELetSig _ (_, _) -> undefined
 
@@ -315,14 +315,14 @@ freshHM = do
   put (TypingContext constraints substs ctx (freshId + 1))
   return (fromUVarIdent (makeIdent freshId))
 
--- generalizeHM :: ty n -> HMType ty -> TypeCheck' ty n (ty n)
+-- generalizeHM :: (UType binder typeSig) n -> HMType (UType binder typeSig) -> TypeCheck' (UType binder typeSig) n ((UType binder typeSig) n)
 -- generalizeHM whatTyp xTyp = do
 --   (TypingContext' _ substs ctx _) <- get
 --   let whatTyp1 = applySubstsToType substs whatTyp
 --   let ctx' = fmap (applySubstsToType substs) ctx
 --   let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
 --   let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
---   let whatTyp2 = generalize whatFreeIdents whatTyp1
+--   let whatTyp2 = generalize whatFreeIdents (PolyType (TypeScheme [] whatTyp1))
 --   enterScope xTyp TypeScheme (whatFreeIdents, whatTyp2) (reconstructType' eExpr) -- xTyp is not binder but type
 
 -- -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
@@ -330,8 +330,17 @@ freshHM = do
 -- -- >>> generalize ["?b", "?a"] "?a -> ?b -> ?a"
 -- -- forall x0 . forall x1 . x1 -> x0 -> x1
 
-generalize :: [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
-generalize _ _= undefined
+generalize :: [Raw.UVarIdent] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
+generalize _ (MonoType ty) = (Monotype ty)
+generalize = go Foil.emptyScope
+  where
+    go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
+    go _ [] type_ = type_
+    go ctx (x : xs) (PolyType (TypeScheme binders type_)) = Foil.withFresh ctx $ \binder ->
+      let newScope = Foil.extendScope binder ctx
+          x' = FreeFoil.Var (Foil.nameOf binder)
+          type' = applySubstToType (x, x') (Foil.sink type_)
+       in  (go newScope xs (PolyType (TypeScheme (binders ++ binder) type')))
 -- generalize :: [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
 -- generalize = go Foil.emptyScope
 --   where
@@ -493,9 +502,11 @@ reconstructTypeScoped' ::
   (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.ScopedAST binder sig n ->
   TypeCheck (UType typeBinder typeSig) n (HMType (UType typeBinder typeSig), UType typeBinder typeSig Foil.VoidS)
-reconstructTypeScoped' = undefined
+reconstructTypeScoped' _ = undefined
+  
 
-lookupVarInTypingContext :: Foil.Name n -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
+
+lookupVarInTypingContext :: Foil.Name n -> TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 lookupVarInTypingContext x = do
   TypingContext _ _ ctx freshId <- get
   let xTyp = Foil.lookupName x ctx
@@ -509,8 +520,15 @@ updateFreshId freshId = do
   put (TypingContext constrs subst ctx freshId)
 
 
-specializeHM :: HMType (UType binder typeSig) -> Int -> (UType binder typeSig Foil.VoidS, Int)
-specializeHM _ _ = undefined
+specializeHM :: HMType (UType typeBinder typeSig) -> Int -> (UType typeBinder typeSig Foil.VoidS, Int)
+specializeHM (PolyType (TypeScheme list ty)) freshId = go list ty freshId
+  where 
+    go :: [Foil.NameBinder n Foil.VoidS] -> UType typeBinder typeSig n -> Int -> (UType typeBinder typeSig Foil.VoidS, Int)
+    go [] ty freshId = (ty, freshId)
+    go (binder:bs) ty freshId = let subst = Foil.addSubst Foil.identitySubst binder (fromUVarIdent (makeIdent freshId))
+                             in (FreeFoil.substitute Foil.emptyScope subst ty, freshId + 1)
+specializeHM (MonoType ty) freshId = (ty, freshId)
+
 -- -- use enterScope ...
 
 -- -- freshTypeVar :: TypeCheck' ty n (ty n)
@@ -638,3 +656,5 @@ makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 --   let subst = Foil.addSubst Foil.identitySubst binder (TUVar (makeIdent freshId))
 --    in specialize (FreeFoil.substitute Foil.emptyScope subst type_) (freshId + 1)
 -- specialize type_ freshId = (type_, freshId)
+
+
