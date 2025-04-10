@@ -230,7 +230,17 @@ instance
       case Foil.assertDistinct c of
         Foil.Distinct ->
           unsinkType scope bodyType
-
+    EForSig e1 e2 body -> do
+      -- e1t <- infer e1
+      -- check e2 e1t
+      check e1 (Term TNat)
+      check e2 (Term TNat)
+      -- Scoped c bodyType <- infer (body (Just e1t))
+      Scoped c bodyType <- infer (body (Just (Term TNat)))
+      case Foil.assertDistinct c of
+        Foil.Distinct ->
+          unsinkType scope bodyType
+      
     --  Γ ⊢ t₁ => T₁   Γ, x : T₁ ⊢ t₂ => T₂
     -- ————————————————————————————————————
     --  Γ ⊢ let x = t₁ in t₂ => T₂
