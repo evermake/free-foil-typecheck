@@ -184,13 +184,15 @@ instance
       Term (TForAll x bodyType) ->
         check (body (Just (Term TType))) (Scoped x (Term bodyType))
       _ -> Left "unexpected type abstraction"
-    ETAppSig e t -> \term -> do
+    ETAppSig e t -> \expectedType -> do
       check t (Term TType)
+      (Term tt) <- infer t
       case infer e of
-        Right (Term (TForAll x bodyType)) -> do
-          check term (Scoped x (Term bodyType))
+        Right (Term (TForAll (FoilPatternVar x) bodyType)) -> do
+          let subst = Foil.addSubst Foil.identitySubst x tt
+          let actualType = FreeFoil.substitute (nameMapToScope scope) subst bodyType
+          (scope, Term actualType) `shouldBe`  expectedType
         _ -> Left "expected a type abstraction"
-      check e term
 
     sig -> defaultCheckSig scope sig
       -- _ -> ...
@@ -246,6 +248,16 @@ instance
           Term bodyType' <- unsinkType scope bodyType
           return (Term (TArrow argType bodyType'))
 
+    ETAppSig _ _ -> undefined
+    ETAbsSig _ -> undefined
+    TBoolSig -> undefined
+    TNatSig -> undefined
+    TUVarSig _ -> undefined
+    TForAllSig _ -> undefined
+    TTypeSig -> undefined
+    TArrowSig _ _ -> undefined
+
+    --  Illegal term-level use of the type constructor or class 
 
 bidirectionalCheck ::
   (Foil.Distinct n, Bitraversable sig, AlphaEquiv ty, TypingSig binder ty sig, Foil.UnifiablePattern binder, Foil.Sinkable ty, HasExactlyOneBinder binder) =>
