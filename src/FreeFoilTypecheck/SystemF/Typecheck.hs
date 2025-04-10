@@ -360,9 +360,13 @@ bidirectionalCheckInferScoped scope (FreeFoil.ScopedAST binder body) =
               _ -> Left "non-unifiable patterns"
         }
 
-extractTypeFromBinder :: HasExactlyOneBinder binder => binder n l -> Maybe (ty n) -> Either String (ty n)
+extractTypeFromBinder :: 
+  (HasExactlyOneBinder binder) => 
+  binder n l -> 
+  Maybe (ty n) -> 
+  Either String (ty n)
 extractTypeFromBinder _ Nothing = Left "cannot infer without type annotation for pattern"
-extractTypeFromBidner _ (Just ty) = return ty
+extractTypeFromBinder _ (Just ty) = Right ty
 
 -- let scope' = Foil.addNameBinders binder _ (Foil.sink <$> scope)
 -- typeOfBody <- bidirectionalInfer scope' body
