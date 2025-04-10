@@ -2,21 +2,21 @@
 
 PatternVar. Pattern ::= Ident ;
 
-EVar.    Exp3 ::= Ident ;
-ETrue.   Exp3 ::= "true" ;
-EFalse.  Exp3 ::= "false" ;
-ENat.    Exp3 ::= Integer ;
-EAdd.    Exp2 ::= Exp2 "+" Exp3 ;
-ESub.    Exp2 ::= Exp2 "-" Exp3 ;
+EVar.    Exp4 ::= Ident ;
+ETrue.   Exp4 ::= "true" ;
+EFalse.  Exp4 ::= "false" ;
+ENat.    Exp4 ::= Integer ;
+EAdd.    Exp3 ::= Exp3 "+" Exp4 ;
+ESub.    Exp3 ::= Exp3 "-" Exp4 ;
+EIsZero. Exp3 ::= "iszero" Exp4 ;
+EApp.    Exp2 ::= Exp2 Exp3 ;
 EIf.     Exp1 ::= "if" Exp1 "then" Exp1 "else" Exp1 ;
-EIsZero. Exp2 ::= "iszero" "(" Exp ")" ;
-ETyped.  Exp  ::= Exp1 ":" Type ;
 ELet.    Exp1 ::= "let" Pattern "=" Exp1 "in" ScopedExp ;
 EAbs.    Exp1 ::= "λ" Pattern "." ScopedExp ;
-EApp.    Exp1 ::= Exp1 Exp2 ;
 EFor.    Exp1 ::= "for" Pattern "in" "[" Exp1 ".." Exp1 "]" "do" ScopedExp ;
+ETyped.  Exp  ::= Exp1 ":" Type ;
 
-coercions Exp 3 ;
+coercions Exp 4 ;
 
 ScopedExp. ScopedExp ::= Exp1 ;
 
@@ -28,8 +28,8 @@ TPatternVar. TypePattern ::= Ident ;
 TUVar.   Type2 ::= UVarIdent ;
 TNat.    Type2 ::= "Nat" ;
 TBool.   Type2 ::= "Bool" ;
-TArrow.  Type1 ::= Type2 "->" Type1 ;
 TVar.    Type2 ::= Ident ;
+TArrow.  Type1 ::= Type2 "->" Type1 ;
 TForAll. Type ::= "forall" TypePattern "." ScopedType ;
 
 coercions Type 2 ;
