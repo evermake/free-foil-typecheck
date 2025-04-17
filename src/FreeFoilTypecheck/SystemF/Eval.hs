@@ -67,6 +67,9 @@ eval scope (EApp e1 e2) = do
       let subst = addSubst identitySubst xp e2'
       eval scope (substitute (nameMapToScope scope) subst e)
     _ -> Left "Unsupported expression in application"
+      let subst = addSubst identitySubst x e2'
+      eval scope (substitute (nameMapToScope scope) subst e)
+    e -> Left ("Unsupported expression in application" <> show (Term e))
 eval scope (EFor e1 e2 (FoilPatternVar xp) expr) = do
   e1_val <- eval scope e1
   e2_val <- eval scope e2
