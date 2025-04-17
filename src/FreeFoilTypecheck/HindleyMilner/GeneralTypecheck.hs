@@ -195,11 +195,18 @@ emptyTypingContext = TypingContext [] [] Foil.emptyNameMap 0
 
 -- type Constraint = (Type', Type')
 
+type Infer typeBinder typeSig = UType typeBinder typeSig Foil.VoidS
+
+type ScopedInfer typeBinder typeSig n =
+  Maybe (HMType (UType typeBinder typeSig))
+  -> TypeCheck (UType typeBinder typeSig) n (Infer typeBinder typeSig, Infer typeBinder typeSig)
 
 class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (sig :: K.Type -> K.Type -> K.Type) where
   inferSigHM ::
-    sig (HMType (UType binder typeSig), UType binder typeSig Foil.VoidS) (UType binder typeSig Foil.VoidS) -> -- expr node
-    TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS) -- typecheck result
+    sig
+      (ScopedInfer binder typeSig n)
+      (Infer binder typeSig) -> -- expr node
+    TypeCheck (UType binder typeSig) n (Infer binder typeSig) -- typecheck result
 
 class AlphaEquiv t where
   alphaEquiv :: (Foil.Distinct n) => Foil.Scope n -> t n -> t n -> Bool
@@ -258,22 +265,19 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       return ty
     ENatSig _ -> do
       return (injectUType TNat)
-    EForSig fromType toType (binderType, bodyType) -> do
+    EForSig fromType toType inferBody -> do
+      (binderType, bodyType) <- inferBody Nothing
       _ <- unifyHM fromType (injectUType TNat)
       _ <- unifyHM toType (injectUType TNat)
-      specBinderTy <- specializeHM binderType -- ?
-      _ <- unifyHM specBinderTy (injectUType TNat) -- ?
+      _ <- unifyHM binderType (injectUType TNat) -- ?
       return bodyType
-    EAbsSig ((MonoType paramType), bodyType) -> do
+    EAbsSig inferBody -> do
+      (paramType, bodyType) <- inferBody Nothing
       return (TArrow' paramType bodyType)
-    ELetSig _ (_, _) -> undefined
-    -- binderType ((MonoType binder), bodyType) -> do
-    --     genBinderType <- generalizeHM binderType
-    --     specTy <- specializeHM genBinderType
-    --     addSubsts [(binder, specTy)]
-    --     bodyType' <- applySubstsFromContextToType bodyType
-    --     return bodyType' 
-
+    ELetSig type1 inferBody -> do
+      gtype1 <- generalizeHM type1
+      (_, bodyType) <- inferBody (Just gtype1)
+      return bodyType
       
 applySubstsFromContextToType
   :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder, Foil.DExt Foil.VoidS n)
@@ -582,19 +586,31 @@ reconstructType = \case
 reconstructTypeScoped' ::
   (Foil.CoSinkable typeBinder, Bitraversable sig, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, TypedPattern (UType typeBinder typeSig) binder) =>
   FreeFoil.ScopedAST binder sig n ->
-  TypeCheck (UType typeBinder typeSig) n (HMType (UType typeBinder typeSig), UType typeBinder typeSig Foil.VoidS)
+  TypeCheck (UType typeBinder typeSig) n (ScopedInfer typeBinder typeSig n)
 reconstructTypeScoped' (FreeFoil.ScopedAST binder body) = do
   -- _
-  type_ <- freshMonoType
-  bodyType <- enterScopePattern binder type_ $ do
-    reconstructType body
-  return (type_, bodyType)
+  return $ \case
+    Nothing -> do
+      type_ <- freshTypeVar
+      bodyType <- enterScopePattern binder (MonoType type_) $ do
+        reconstructType body
+      return (type_, bodyType)
+    Just gtype -> do
+      bodyType <- enterScopePattern binder gtype $ do
+        reconstructType body
+      return (undefined, bodyType)
 
 freshMonoType :: TypeCheck (UType typeBinder typeSig) n (HMType (UType typeBinder typeSig))
 freshMonoType = do
   TypingContext _ _ _ freshId <- get
   updateFreshId (freshId + 1)
   return (MonoType (fromUVarIdent (makeIdent freshId)))
+
+freshTypeVar :: TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
+freshTypeVar = do
+  TypingContext _ _ _ freshId <- get
+  updateFreshId (freshId + 1)
+  return (fromUVarIdent (makeIdent freshId))
 
 
 lookupVarInTypingContext :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => Foil.Name n -> TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
