@@ -213,9 +213,7 @@ instance
     EIfSig cond thenBranch elseBranch -> do
       check cond (Term TBool)
       thenType <- infer thenBranch
-      elseType <- infer elseBranch
-      unless (alphaEquiv (nameMapToScope scope) thenType elseType) $
-        Left "branches of if-expression must have the same type"
+      check elseBranch thenType
       return thenType
     EIsZeroSig e -> do
       check e (Term TNat)
@@ -555,8 +553,6 @@ inferType scope (Term (ELet e1 pat e2)) = do
       let newScope = extendContextPattern pat type1 scope -- Γ' = Γ, x : type1
       type' <- inferType newScope (Term e2) -- Γ' ⊢ e2 : ?
       unsinkType scope type'
-inferType _scope (Term (EAbs (FoilPatternVar _x) _e)) = do
-  Left "cannot infer lambda-abstraction without an explicit type annotation for the argument"
 inferType scope (Term (EAbs (FoilPatternAsc x type_) e)) = do
   case Foil.assertDistinct x of
     Foil.Distinct -> do
@@ -564,6 +560,9 @@ inferType scope (Term (EAbs (FoilPatternAsc x type_) e)) = do
       let newScope = extendContext x type_ scope -- Γ' = Γ, x : type_
       type' <- inferType newScope (Term e)
       fmap (Term . TArrow (convertTermToAST type_) . convertTermToAST) (unsinkType scope type')
+inferType _scope (Term (EAbs (FoilPatternVar _x) _e)) = do
+  Left "cannot infer lambda-abstraction without an explicit type annotation for the argument"
+
 -- inferType _scope (EAbsUntyped _ _) = error "cannot infer λ-abstraction without explicit type annotation for the argument" -- TODO
 inferType scope (Term (EApp e1 e2)) = do
   -- (Γ ⊢ e1) (Γ ⊢ e2) : ?
