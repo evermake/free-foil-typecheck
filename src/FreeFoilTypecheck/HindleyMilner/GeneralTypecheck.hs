@@ -261,12 +261,25 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
     EForSig fromType toType (binderType, bodyType) -> do
       _ <- unifyHM fromType (injectUType TNat)
       _ <- unifyHM toType (injectUType TNat)
+      specBinderTy <- specializeHM binderType -- ?
+      _ <- unifyHM specBinderTy (injectUType TNat) -- ?
       return bodyType
     EAbsSig ((MonoType paramType), bodyType) -> do
       return (TArrow paramType bodyType)
     ELetSig _ (_, _) -> undefined
-      -- binderType (binder, bodyType) -> do
-      --   genBinderType <- generalizeHM binderType
+    -- binderType ((MonoType binder), bodyType) -> do
+    --     genBinderType <- generalizeHM binderType
+    --     specTy <- specializeHM genBinderType
+    --     addSubsts [(binder, specTy)]
+    --     bodyType' <- applySubstsFromContextToType bodyType
+    --     return bodyType' 
+
+      
+applySubstsFromContextToType :: UType binder typeSig n -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
+applySubstsFromContextToType type_ = do 
+  TypingContext _ substs _ _ <- get
+  type' <- applySubstsToType substs type_
+  return type'
 
 
 --   generalizeHM eType xType
@@ -551,7 +564,14 @@ lookupVarInTypingContext :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => F
 lookupVarInTypingContext x = do
   TypingContext _ _ ctx freshId <- get
   let xTyp = Foil.lookupName x ctx
-  let (specTyp, freshId2) = specializeHM xTyp freshId
+  let (specTyp, freshId2) = specialize xTyp freshId
+  updateFreshId freshId2
+  return specTyp
+
+specializeHM :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => HMType (UType typeBinder typeSig) -> TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
+specializeHM x = do
+  TypingContext _ _ ctx freshId <- get
+  let (specTyp, freshId2) = specialize x freshId
   updateFreshId freshId2
   return specTyp
 
@@ -561,8 +581,8 @@ updateFreshId freshId = do
   put (TypingContext constrs subst ctx freshId)
 
 
-specializeHM :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => HMType (UType typeBinder typeSig) -> Int -> (UType typeBinder typeSig Foil.VoidS, Int)
-specializeHM (PolyType (TypeScheme list ty)) freshId = go Foil.emptyScope list ty freshId
+specialize :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => HMType (UType typeBinder typeSig) -> Int -> (UType typeBinder typeSig Foil.VoidS, Int)
+specialize (PolyType (TypeScheme list ty)) freshId = go Foil.emptyScope list ty freshId
   where 
     go :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable typeBinder) => Foil.Scope n -> Foil.NameBinderList n l -> UType typeBinder typeSig l -> Int -> (UType typeBinder typeSig n, Int)
     go scope Foil.NameBinderListEmpty ty freshId = (ty, freshId)
@@ -573,7 +593,7 @@ specializeHM (PolyType (TypeScheme list ty)) freshId = go Foil.emptyScope list t
               scope' = Foil.extendScope binder scope
               (ty', freshId') = go scope' bs ty (freshId + 1)
           in (FreeFoil.substitute scope subst ty', freshId')
-specializeHM (MonoType ty) freshId = (ty, freshId)
+specialize (MonoType ty) freshId = (ty, freshId)
 
 -- -- use enterScope ...
 
