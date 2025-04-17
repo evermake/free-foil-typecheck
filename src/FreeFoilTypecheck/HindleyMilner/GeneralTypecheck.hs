@@ -174,7 +174,7 @@ instance Monad (TypeCheck (UType binder typeSig) n) where
 -- -- >>> inferTypeNewClosed "let twice = (λt. (λx. (t (t x)))) in let add2 = (λx. x + 2) in let bool2int = (λb. if b then 1 else 0) in let not = (λb. if b then false else true) in (twice add2) (bool2int ((twice not) true))"
 -- -- Right Nat
 inferTypeNewClosed
-  :: (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig, Bitraversable typeSig, FreeFoil.ZipMatch typeSig)
+  :: (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig, Bitraversable typeSig, FreeFoil.ZipMatch typeSig, TypedPattern (UType typeBinder typeSig) binder)
   => FreeFoil.AST binder sig Foil.VoidS
   -> TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = do
@@ -265,7 +265,7 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       _ <- unifyHM specBinderTy (injectUType TNat) -- ?
       return bodyType
     EAbsSig ((MonoType paramType), bodyType) -> do
-      return (TArrow paramType bodyType)
+      return (TArrow' paramType bodyType)
     ELetSig _ (_, _) -> undefined
     -- binderType ((MonoType binder), bodyType) -> do
     --     genBinderType <- generalizeHM binderType
@@ -275,11 +275,13 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
     --     return bodyType' 
 
       
-applySubstsFromContextToType :: UType binder typeSig n -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
+applySubstsFromContextToType
+  :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder, Foil.DExt Foil.VoidS n)
+  => UType binder typeSig n
+  -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
 applySubstsFromContextToType type_ = do 
   TypingContext _ substs _ _ <- get
-  type' <- applySubstsToType substs type_
-  return type'
+  return (applySubstsToType (map (fmap Foil.sink) substs) type_)
 
 
 --   generalizeHM eType xType
@@ -300,7 +302,9 @@ applySubstsFromContextToType type_ = do
 -- generalizeHM _ _ = undefined
 
 
-generalizeHM :: (UType binder typeSig) Foil.VoidS -> TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig))
+generalizeHM
+  :: (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder)
+  => UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig))
 generalizeHM whatTyp = do
   (TypingContext _ substs ctx _) <- get
   let whatTyp1 = applySubstsToType substs whatTyp
@@ -312,9 +316,8 @@ generalizeHM whatTyp = do
   return whatTyp2
 
   where
-    runGeneralize :: [Raw.UVarIdent] -> UType binder typeSig Foil.VoidS -> HMType (UType binder typeSig)
     runGeneralize [] ty = (MonoType ty)
-    runGeneralize freeIdents ty = generalize freeIdents (PolyType (TypeScheme Foil.NameBinderListEmpty ty))
+    runGeneralize freeIdents ty = generalize freeIdents ty
   -- enterScope xTyp TypeScheme (whatFreeIdents, whatTyp2) (reconstructType eExpr) -- xTyp is not binder but type
 
 
@@ -362,17 +365,39 @@ freshHM = do
 -- -- >>> generalize ["?b", "?a"] "?a -> ?b -> ?a"
 -- -- forall x0 . forall x1 . x1 -> x0 -> x1
 
-generalize :: [Raw.UVarIdent] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
+withGeneralizedVars
+  :: (Foil.Distinct n)
+  => Foil.Scope n
+  -> [(a, Foil.Name n)]
+  -> [a]
+  -> (forall l. Foil.NameBinderList n l -> [(a, Foil.Name l)] -> r)
+  -> r
+withGeneralizedVars scope env xs cont =
+  case xs of
+    [] -> cont Foil.NameBinderListEmpty (map (fmap Foil.sink) env)
+    y:ys -> Foil.withFresh scope $ \binder ->
+      let scope' = Foil.extendScope binder scope
+          env'   = (y, Foil.nameOf binder) : map (fmap Foil.sink) env
+      in withGeneralizedVars scope' env' ys $ \nameBinderList env'' ->
+            cont (Foil.NameBinderListCons binder nameBinderList) env''
+
+generalize :: (Bifunctor typeSig, Foil.CoSinkable binder) => [Raw.UVarIdent] -> UType binder typeSig Foil.VoidS -> HMType (UType binder typeSig)
 generalize = go Foil.emptyScope
   where
-    go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
-    go _ _ (MonoType ty) = MonoType ty
-    go _ [] type_ = type_
-    go ctx (x : xs) (PolyType (TypeScheme binders type_)) = Foil.withFresh ctx $ \binder ->
-      let newScope = Foil.extendScope binder ctx
-          x' = FreeFoil.Var (Foil.nameOf binder)
-          type' = applySubstToType (x, x') (Foil.sink type_)
-       in  (go newScope xs (PolyType (TypeScheme (Foil.NameBinderListCons binder binders) type')))
+    go scope [] type_ = MonoType type_
+    go scope xs type_ = withGeneralizedVars scope [] xs $ \freshNameBinders env ->
+      case (Foil.assertExt freshNameBinders, Foil.assertDistinct freshNameBinders) of
+        (Foil.Ext, Foil.Distinct) ->
+          let substs = map (fmap FreeFoil.Var) env
+              type' = applySubstsToType substs (Foil.sink type_)
+          in PolyType (TypeScheme freshNameBinders type')
+    -- go _ _ (MonoType ty) = MonoType ty
+    -- go _ [] type_ = type_
+    -- go ctx (x : xs) (PolyType (TypeScheme binders type_)) = Foil.withFresh ctx $ \binder ->
+    --   let newScope = Foil.extendScope binder ctx
+    --       x' = FreeFoil.Var (Foil.nameOf binder)
+    --       type' = applySubstToType (x, x') (Foil.sink type_)
+    --    in  (go newScope xs (PolyType (TypeScheme (Foil.NameBinderListCons binder binders) type')))
 
 -- generalize :: [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
 -- generalize = go Foil.emptyScope
@@ -459,9 +484,12 @@ applySubstsToType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder
 applySubstsToType [] typ = typ
 applySubstsToType (subst : rest) typ = applySubstsToType rest (applySubstToType subst typ)
 
-applySubstsToHMType :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
-applySubstsToHMType substs (PolyType (TypeScheme freeVars ty)) = PolyType (TypeScheme freeVars (applySubstsToType substs ty))
-applySubstsToHMType substs (MonoType ty) = MonoType (applySubstsToType substs ty)
+applySubstsToHMType :: (Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig Foil.VoidS)] -> HMType (UType binder typeSig) -> HMType (UType binder typeSig)
+applySubstsToHMType substs (PolyType (TypeScheme freeVars ty)) =
+  case (Foil.assertExt freeVars, Foil.assertDistinct freeVars) of
+    (Foil.Ext, Foil.Distinct) -> PolyType (TypeScheme freeVars (applySubstsToType (map (fmap Foil.sink) substs) ty))
+applySubstsToHMType substs (MonoType ty) =
+  MonoType (applySubstsToType substs ty)
 
 applySubstsInSubsts :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> USubst_ (UType binder typeSig n) -> USubst_ (UType binder typeSig n)
 applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
@@ -500,6 +528,15 @@ put new = TypeCheck $ \_old -> Right ((), new)
 --   substs' <- eitherToTypeCheck (unifyWith substs constraints)
 --   put (TypingContext' [] (substs +++ substs') ctx freshId)
 
+class TypedPattern ty binder where
+  enterScopePattern :: binder n l -> HMType ty -> TypeCheck ty l a -> TypeCheck ty n a
+
+instance TypedPattern (UType binder typeSig) Foil.NameBinder where
+  enterScopePattern = enterScope
+
+instance TypedPattern (UType binder typeSig) FoilPattern where
+  enterScopePattern (FoilPatternVar binder) = enterScopePattern binder
+
 enterScope :: Foil.NameBinder n l -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) l a -> TypeCheck (UType binder typeSig) n a
 enterScope x type_ action =
   localTypingContext
@@ -532,7 +569,7 @@ addSubsts substs = do
   put (TypingContext constraints (substs +++ substs') ctx freshId)
 
 reconstructType ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bitraversable sig, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, TypedPattern (UType typeBinder typeSig) binder) =>
   FreeFoil.AST binder sig n ->
   TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 reconstructType = \case
@@ -543,13 +580,13 @@ reconstructType = \case
     inferSigHM node'
 
 reconstructTypeScoped' ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bitraversable sig, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, TypedPattern (UType typeBinder typeSig) binder) =>
   FreeFoil.ScopedAST binder sig n ->
   TypeCheck (UType typeBinder typeSig) n (HMType (UType typeBinder typeSig), UType typeBinder typeSig Foil.VoidS)
 reconstructTypeScoped' (FreeFoil.ScopedAST binder body) = do
   -- _
   type_ <- freshMonoType
-  bodyType <- enterScope binder type_ $ do
+  bodyType <- enterScopePattern binder type_ $ do
     reconstructType body
   return (type_, bodyType)
 
@@ -724,3 +761,9 @@ makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 -- specialize type_ freshId = (type_, freshId)
 
 
+
+-- * Orphans
+
+instance Foldable (Foil.NameMap n)
+instance Traversable (Foil.NameMap n)
+instance Functor (Foil.NameMap n)
