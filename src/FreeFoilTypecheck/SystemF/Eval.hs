@@ -66,7 +66,7 @@ eval scope (EApp e1 e2) = do
     EAbs (FoilPatternVar xp) e -> do
       let subst = addSubst identitySubst xp e2'
       eval scope (substitute (nameMapToScope scope) subst e)
-    _ -> Left "Unsupported expression in application"
+    EAbs (FoilPatternAsc x _t) e -> do
       let subst = addSubst identitySubst x e2'
       eval scope (substitute (nameMapToScope scope) subst e)
     e -> Left ("Unsupported expression in application" <> show (Term e))
