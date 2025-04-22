@@ -53,6 +53,7 @@ data Scoped binder (t :: Foil.S -> Type) (n :: Foil.S) where
 data TypeError ty
   = TypeErrorUnexpectedType ty ty
   | TypeErrorUnexpectedDependentType
+  deriving (Show)
 
 type Context n = Foil.NameMap n (Term n)
 
@@ -172,7 +173,7 @@ defaultCheckSig ctx node expectedType = do
 --           node'''
 
 instance
-  (forall n. Show (TypeError (Term n)), MonadFail (Either String)) =>
+  (forall n. Show (TypeError (Term n))) =>
   TypingSig (FoilPattern Term) Term TermSig
   where
 
@@ -229,11 +230,8 @@ instance
         Foil.Distinct ->
           unsinkType scope bodyType
     EForSig e1 e2 body -> do
-      -- e1t <- infer e1
-      -- check e2 e1t
       check e1 (Term TNat)
       check e2 (Term TNat)
-      -- Scoped c bodyType <- infer (body (Just e1t))
       Scoped c bodyType <- infer (body (Just (Term TNat)))
       case Foil.assertDistinct c of
         Foil.Distinct ->
@@ -250,11 +248,14 @@ instance
           return (Term b)
         _ -> Left "not a function"
     EAbsSig body -> do
-      Scoped (FoilPatternAsc x (Term argType)) bodyType <- infer (body Nothing)
-      case Foil.assertDistinct x of
-        Foil.Distinct -> do
-          Term bodyType' <- unsinkType scope bodyType
-          return (Term (TArrow argType bodyType'))
+      bodyType <- infer (body Nothing)
+      case bodyType of
+        Scoped (FoilPatternAsc x (Term argType)) bodyType' ->       
+          case Foil.assertDistinct x of
+            Foil.Distinct -> do
+              Term bodyType'' <- unsinkType scope bodyType'
+              return (Term (TArrow argType bodyType''))
+        _ -> Left "not a function"                               -- TODO change "not a function" to correct error
 
     ETAppSig _ _ -> undefined
     ETAbsSig _ -> undefined
@@ -403,9 +404,9 @@ shouldBe (scope, actualType) expectedType
           [ "expected type",
             -- "  " ++ show expectedType,
             "but got type",
-            -- "  " ++ Raw.printTree (fromTerm actualType),
-            "when typechecking expession",
-            "  " -- ++ show e
+            -- "  " ++ Raw.printTree actualType,
+            "when typechecking expession"
+            -- "  " ++ show e
           ]
   where
     sameType = alphaEquiv (nameMapToScope scope) actualType expectedType
@@ -438,6 +439,16 @@ typecheck scope (Term (EAbs (FoilPatternAsc pat argTypeActual) body)) expectedTy
   case expectedType of
     Term (TArrow argType resultType) -> do
       (scope, argTypeActual) `shouldBe` Term argType
+      let newScope = extendContext pat (Term argType) scope
+      case (Foil.assertDistinct pat, Foil.assertExt pat) of
+        (Foil.Distinct, Foil.Ext) -> do
+          type' <- typecheck newScope (Term body) (Foil.sink (Term resultType))
+          unsinkType scope type'
+    _ -> Left ("unexpected λ-abstraction when typechecking against non-functional type: " <> show expectedType)
+
+typecheck scope (Term (EAbs (FoilPatternVar pat) body)) expectedType = do
+  case expectedType of
+    Term (TArrow argType resultType) -> do
       let newScope = extendContext pat (Term argType) scope
       case (Foil.assertDistinct pat, Foil.assertExt pat) of
         (Foil.Distinct, Foil.Ext) -> do

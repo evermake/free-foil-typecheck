@@ -12,13 +12,13 @@ spec = parallel $ do
     paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/SystemF/files/well-typed")
     forM_ paths $ \path -> it path $ do
       contents <- readFile path
-      interpret contents `shouldSatisfy` isSuccess
+      interpretGen contents `shouldSatisfy` isSuccess
 
   describe "ill-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/SystemF/files/ill-typed")
     forM_ paths $ \path -> it path $ do
       contents <- readFile path
-      interpret contents `shouldSatisfy` isTypeError
+      interpretGen contents `shouldSatisfy` isTypeError
 
 isSuccess :: Result -> Bool
 isSuccess Success {} = True

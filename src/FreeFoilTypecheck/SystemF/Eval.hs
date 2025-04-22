@@ -13,13 +13,6 @@ import           FreeFoilTypecheck.SystemF.Typecheck            (Context, nameMa
 -- >>> :set -XOverloadedStrings
 -- >>> import Control.Monad.Foil (emptyNameMap)
 
--- |
--- >>> eval emptyNameMap "if (iszero (2 - (1 + 1))) then true else 0"
--- Right true
--- >>> eval emptyNameMap "if (iszero (2 - (true + 1))) then true else 0"
--- Left "Unsupported expression in addition"
--- >>> eval emptyNameMap "ΛX. λx:X. x"
--- Right Λ x0 . λ x1 : x0 . x1
 eval :: (Distinct n) => Context n -> AST (FoilPattern Term) TermSig n -> Either String (AST (FoilPattern Term) TermSig n)
 eval _scope (Var x) = Right (Var x)
 eval _scope ETrue = Right ETrue
@@ -110,6 +103,13 @@ eval _ (TArrow l r) = Right (TArrow l r)
 eval _ (TForAll p b) = Right (TForAll p b)
 eval _ (TUVar n) = Right (TUVar n)
 
+-- |
+-- >>> newEval emptyNameMap "if (iszero (2 - (1 + 1))) then true else false"
+-- Right true
+-- >>> newEval emptyNameMap "if (iszero (2 - (true + 1))) then true else 0"
+-- Left "Unsupported expression in addition"
+-- >>> newEval emptyNameMap "ΛX. λx:X. x"
+-- Right Λ x0 . λ x1 : x0 . x1
 newEval :: Distinct n => Context n -> Term n -> Either String (Term n)
 newEval scope (Term a) = case eval scope a of
   Left err -> Left err
