@@ -15,7 +15,7 @@ repl :: String -> String
 repl input =
   case toExpClosed <$> pExp tokens of
     Left err -> "Parsing error: " ++ err
-    Right e -> case inferTypeNewClosed e of
+    Right e -> case testInferTypeNewClosed e of
       Left err -> "Typechecking error: " ++ err
       Right _type -> case eval emptyScope e of
         Left err -> "Evaluation error: " ++ err

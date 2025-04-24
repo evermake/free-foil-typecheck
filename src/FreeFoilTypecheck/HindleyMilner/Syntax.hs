@@ -17,6 +17,7 @@ import Control.Monad.Free.Foil.TH
 import Data.Bifunctor.TH
 import Data.Bifunctor.Sum(Sum(..))
 import Data.Map (Map)
+import qualified Data.Kind as K
 import qualified Data.Map as Map
 import Data.String (IsString (..))
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
@@ -185,5 +186,6 @@ instance Show (Type n) where
 instance Eq (Type Foil.VoidS) where
   (==) = alphaEquiv Foil.emptyScope
 
--- pattern TArrow' :: 
+pattern TArrow' :: forall {binder :: Foil.S -> Foil.S -> K.Type} {q :: K.Type -> K.Type -> K.Type} {n :: Foil.S}. AST binder (Sum TypeSig q) n
+                  -> AST binder (Sum TypeSig q) n -> AST binder (Sum TypeSig q) n
 pattern TArrow' a b = Node (L2 (TArrowSig a b))

@@ -7,7 +7,7 @@ import Data.List
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed, toTypeClosed)
-import FreeFoilTypecheck.HindleyMilner.Typecheck (allUVarsOfType, generalize, inferTypeNewClosed)
+import FreeFoilTypecheck.HindleyMilner.GeneralTypecheck (allUVarsOfType, testInferTypeNewClosed, injectUType, equivHMType, alphaEquiv, generalize)
 import System.Directory
 import System.FilePath
 import Test.Hspec
@@ -55,13 +55,13 @@ dirWalk filefunc top = do
 programTypesMatch :: String -> String -> Either String Bool
 programTypesMatch actual expected = do
   typeExpected <- toTypeClosed <$> pType tokensExpected
-  let vars = allUVarsOfType typeExpected
-  let genExpected = generalize vars typeExpected
+  let vars = allUVarsOfType (injectUType typeExpected)
+  let genExpected = generalize vars (injectUType typeExpected)
   exprActual <- toExpClosed <$> pExp tokensActual
-  typeActual <- inferTypeNewClosed exprActual
+  typeActual <- testInferTypeNewClosed exprActual
   let vars' = allUVarsOfType typeActual
   let genActual = generalize vars' typeActual
-  case (Foil.alphaEquiv Foil.emptyScope genActual genExpected) of
+  case (equivHMType alphaEquiv genActual genExpected) of
     True -> Right True
     False ->
       Left $

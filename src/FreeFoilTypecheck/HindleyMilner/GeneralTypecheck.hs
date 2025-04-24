@@ -20,6 +20,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
 module FreeFoilTypecheck.HindleyMilner.GeneralTypecheck where
@@ -30,6 +31,7 @@ import qualified Control.Monad.Foil as Foil
 -- import qualified Control.Monad.Foil as FreeFoil
 import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
+import qualified Control.Monad.Foil.Relative as Foil
 -- import qualified Data.Foldable as F
 -- import qualified Data.IntMap as IntMap
 
@@ -60,7 +62,7 @@ type USubst_ tyn = (Raw.UVarIdent, tyn)
 -- -- ∀ x₁ x₂ … xₙ. T
 -- -- Type scheme (a.k.a. polytype).
 data TypeScheme ty where
-  TypeScheme :: Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty --Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
+  TypeScheme :: Foil.NameBinderList Foil.VoidS n -> ty n -> TypeScheme ty
 
 data HMType ty
   = MonoType (ty Foil.VoidS)
@@ -217,6 +219,58 @@ instance
   where
   alphaEquiv = FreeFoil.alphaEquiv
 
+instance 
+  (Bifunctor typeSig, Bifoldable typeSig, FreeFoil.ZipMatch typeSig, Foil.UnifiablePattern binder) =>
+  AlphaEquiv (UType binder typeSig)
+  where 
+    alphaEquiv = FreeFoil.alphaEquiv
+
+equivHMType ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Scope n -> ty n -> ty n -> Bool) -> HMType ty -> HMType ty -> Bool
+equivHMType alphaEquivFunc t1 t2 =
+  case (toTypeScheme t1, toTypeScheme t2) of
+    (Just t1Scheme, Just t2Scheme) -> equivTypeScheme alphaEquivFunc t1Scheme t2Scheme
+    (Nothing, Nothing) -> 
+      let ty1 = unwrapMonoType t1
+          ty2 = unwrapMonoType t2
+      in alphaEquivFunc Foil.emptyScope ty1 ty2
+    (_, _) -> False
+
+unwrapMonoType:: HMType ty -> ty Foil.VoidS
+unwrapMonoType (MonoType ty) = ty
+unwrapMonoType (PolyType _) = undefined
+   
+toTypeScheme :: HMType ty -> Maybe (TypeScheme ty)
+toTypeScheme (PolyType typeScheme) = Just typeScheme
+toTypeScheme (MonoType _) = Nothing
+
+equivTypeScheme ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Scope n -> ty n -> ty n -> Bool) -> TypeScheme ty -> TypeScheme ty -> Bool
+equivTypeScheme alphaEquivFunc (TypeScheme binders1 ty1) (TypeScheme binders2 ty2) =
+  case Foil.unifyPatterns binders1 binders2 of
+      Foil.SameNameBinders{} ->
+        case Foil.assertDistinct binders1 of
+          Foil.Distinct ->
+            let scope = Foil.extendScopePattern binders1 Foil.emptyScope
+            in alphaEquivFunc scope ty1 ty2
+      Foil.RenameLeftNameBinder _ rename1to2 ->
+        case Foil.assertDistinct binders2 of
+          Foil.Distinct ->
+            let scope = Foil.extendScopePattern binders2 Foil.emptyScope
+            in alphaEquivFunc scope (Foil.liftRM scope (Foil.fromNameBinderRenaming rename1to2) ty1) ty2
+      Foil.RenameRightNameBinder _ rename2to1 ->
+        case Foil.assertDistinct binders1 of
+          Foil.Distinct ->
+            let scope = Foil.extendScopePattern binders1 Foil.emptyScope
+            in alphaEquivFunc scope ty1 (Foil.liftRM scope (Foil.fromNameBinderRenaming rename2to1) ty2)
+      Foil.RenameBothBinders binders' rename1 rename2 ->
+        case Foil.assertDistinct binders' of
+          Foil.Distinct ->
+            let scope = Foil.extendScopePattern binders' Foil.emptyScope
+            in alphaEquivFunc scope
+                (Foil.liftRM scope (Foil.fromNameBinderRenaming rename1) ty1)
+                (Foil.liftRM scope (Foil.fromNameBinderRenaming rename2) ty2)
+      Foil.NotUnifiable -> False
+
+
 injectUType :: (Bifunctor typeSig) => FreeFoil.AST binder typeSig n -> UType binder typeSig n
 injectUType = transAST L2
 
@@ -265,10 +319,10 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       return ty
     ENatSig _ -> do
       return (injectUType TNat)
-    EForSig fromType toType inferBody -> do
+    EForSig fromTy toTy inferBody -> do
       (binderType, bodyType) <- inferBody Nothing
-      _ <- unifyHM fromType (injectUType TNat)
-      _ <- unifyHM toType (injectUType TNat)
+      _ <- unifyHM fromTy (injectUType TNat)
+      _ <- unifyHM toTy (injectUType TNat)
       _ <- unifyHM binderType (injectUType TNat) -- ?
       return bodyType
     EAbsSig inferBody -> do
@@ -388,7 +442,7 @@ withGeneralizedVars scope env xs cont =
 generalize :: (Bifunctor typeSig, Foil.CoSinkable binder) => [Raw.UVarIdent] -> UType binder typeSig Foil.VoidS -> HMType (UType binder typeSig)
 generalize = go Foil.emptyScope
   where
-    go scope [] type_ = MonoType type_
+    go _ [] type_ = MonoType type_
     go scope xs type_ = withGeneralizedVars scope [] xs $ \freshNameBinders env ->
       case (Foil.assertExt freshNameBinders, Foil.assertDistinct freshNameBinders) of
         (Foil.Ext, Foil.Distinct) ->
@@ -498,9 +552,9 @@ applySubstsToHMType substs (MonoType ty) =
 applySubstsInSubsts :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> USubst_ (UType binder typeSig n) -> USubst_ (UType binder typeSig n)
 applySubstsInSubsts substs (l, r) = (l, (applySubstsToType substs r))
 
--- deriving instance Functor (Foil.NameMap n)
+deriving instance Functor (Foil.NameMap n)
 
--- deriving instance Foldable (Foil.NameMap n)
+deriving instance Foldable (Foil.NameMap n)
 
 -- data TypingContext ty n = TypingContext
 --   { tcConstraints :: [Constraint' (ty Foil.VoidS)],
@@ -544,8 +598,8 @@ instance TypedPattern (UType binder typeSig) FoilPattern where
 enterScope :: Foil.NameBinder n l -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) l a -> TypeCheck (UType binder typeSig) n a
 enterScope x type_ action =
   localTypingContext
-    (\ctx@TypingContext{..} -> TypingContext { tcTypings = Foil.addNameBinder x type_ tcTypings, .. } )
-    (\ctx@TypingContext{..} -> TypingContext { tcTypings = popNameBinder x tcTypings, .. } )
+    (\_ctx@TypingContext{..} -> TypingContext { tcTypings = Foil.addNameBinder x type_ tcTypings, .. } )
+    (\_ctx@TypingContext{..} -> TypingContext { tcTypings = popNameBinder x tcTypings, .. } )
     action
 
 popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
@@ -623,7 +677,7 @@ lookupVarInTypingContext x = do
 
 specializeHM :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => HMType (UType typeBinder typeSig) -> TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 specializeHM x = do
-  TypingContext _ _ ctx freshId <- get
+  TypingContext _ _ _ freshId <- get
   let (specTyp, freshId2) = specialize x freshId
   updateFreshId freshId2
   return specTyp
@@ -638,13 +692,13 @@ specialize :: (Bifunctor typeSig, Foil.CoSinkable typeBinder) => HMType (UType t
 specialize (PolyType (TypeScheme list ty)) freshId = go Foil.emptyScope list ty freshId
   where 
     go :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable typeBinder) => Foil.Scope n -> Foil.NameBinderList n l -> UType typeBinder typeSig l -> Int -> (UType typeBinder typeSig n, Int)
-    go scope Foil.NameBinderListEmpty ty freshId = (ty, freshId)
-    go scope (Foil.NameBinderListCons binder bs) ty freshId =
+    go _ Foil.NameBinderListEmpty ty_ freshId_ = (ty_, freshId_)
+    go scope (Foil.NameBinderListCons binder bs) ty_ freshId_ =
       case Foil.assertDistinct binder of
         Foil.Distinct -> 
-          let subst = Foil.addSubst Foil.identitySubst binder (fromUVarIdent (makeIdent freshId))
+          let subst = Foil.addSubst Foil.identitySubst binder (fromUVarIdent (makeIdent freshId_))
               scope' = Foil.extendScope binder scope
-              (ty', freshId') = go scope' bs ty (freshId + 1)
+              (ty', freshId') = go scope' bs ty_ (freshId_ + 1)
           in (FreeFoil.substitute scope subst ty', freshId')
 specialize (MonoType ty) freshId = (ty, freshId)
 
@@ -780,6 +834,18 @@ makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 
 -- * Orphans
 
-instance Foldable (Foil.NameMap n)
-instance Traversable (Foil.NameMap n)
-instance Functor (Foil.NameMap n)
+-- instance Foldable (Foil.NameMap n)
+deriving instance Traversable (Foil.NameMap n)
+-- instance Functor (Foil.NameMap n)
+
+instance Foil.UnifiablePattern Foil.NameBinderList where
+  unifyPatterns Foil.NameBinderListEmpty Foil.NameBinderListEmpty
+    = Foil.SameNameBinders Foil.emptyNameBinders
+  unifyPatterns Foil.NameBinderListEmpty (Foil.NameBinderListCons _ _)
+    = Foil.NotUnifiable
+  unifyPatterns (Foil.NameBinderListCons _ _) Foil.NameBinderListEmpty
+    = Foil.NotUnifiable
+  unifyPatterns (Foil.NameBinderListCons x xs) (Foil.NameBinderListCons y ys)
+    = case (Foil.assertDistinct x, Foil.assertDistinct y) of
+        (Foil.Distinct, Foil.Distinct) -> Foil.unifyNameBinders x y `Foil.andThenUnifyPatterns` (xs, ys)
+  
