@@ -171,6 +171,20 @@ defaultCheckSig ctx node expectedType = do
 --           (\(subterm, ()) -> subterm)
 --           node'''
 
+class HasTrivialBinder binder where
+  triviallyScoped :: (Foil.Distinct n, Foil.Sinkable ty) => Foil.Scope n -> ty n -> Scoped binder ty n
+
+instance HasTrivialBinder Foil.NameBinder where
+  triviallyScoped scope type_ =
+    Foil.withFresh scope $ \binder ->
+      Scoped binder (Foil.sink type_)
+
+instance HasTrivialBinder (FoilPattern Term) where
+  triviallyScoped scope type_ =
+    case triviallyScoped scope type_ of
+      Scoped binder type' ->
+        Scoped (FoilPatternVar binder) type'
+
 instance
   (forall n. Show (TypeError (Term n))) =>
   TypingSig (FoilPattern Term) Term TermSig
@@ -201,9 +215,11 @@ instance
             (scope, b') `shouldBe` Term expectedBodyType
       t -> Left $ "unexpected abstraction" <> show t
     
-    -- ELetSig e body -> \expectedType -> do
-    --   et@(Term astE) <- infer e
-    --   check (body (Just et)) (Scoped expectedType)
+    ELetSig e body -> \expectedType -> do
+      etype <- infer e
+      check
+        (body (Just etype))
+        (triviallyScoped (nameMapToScope scope) expectedType)
 
     sig -> defaultCheckSig scope sig
 
