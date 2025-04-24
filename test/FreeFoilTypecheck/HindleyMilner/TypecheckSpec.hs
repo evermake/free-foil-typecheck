@@ -1,8 +1,6 @@
 module FreeFoilTypecheck.HindleyMilner.TypecheckSpec where
 
 import Control.Monad (forM_)
-import qualified Control.Monad.Foil as Foil
-import qualified Control.Monad.Free.Foil as Foil
 import Data.List
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)

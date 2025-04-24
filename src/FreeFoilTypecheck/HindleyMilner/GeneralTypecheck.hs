@@ -219,13 +219,7 @@ instance
   where
   alphaEquiv = FreeFoil.alphaEquiv
 
-instance 
-  (Bifunctor typeSig, Bifoldable typeSig, FreeFoil.ZipMatch typeSig, Foil.UnifiablePattern binder) =>
-  AlphaEquiv (UType binder typeSig)
-  where 
-    alphaEquiv = FreeFoil.alphaEquiv
-
-equivHMType ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Scope n -> ty n -> ty n -> Bool) -> HMType ty -> HMType ty -> Bool
+equivHMType ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Distinct n => Foil.Scope n -> ty n -> ty n -> Bool) -> HMType ty -> HMType ty -> Bool
 equivHMType alphaEquivFunc t1 t2 =
   case (toTypeScheme t1, toTypeScheme t2) of
     (Just t1Scheme, Just t2Scheme) -> equivTypeScheme alphaEquivFunc t1Scheme t2Scheme
@@ -243,7 +237,7 @@ toTypeScheme :: HMType ty -> Maybe (TypeScheme ty)
 toTypeScheme (PolyType typeScheme) = Just typeScheme
 toTypeScheme (MonoType _) = Nothing
 
-equivTypeScheme ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Scope n -> ty n -> ty n -> Bool) -> TypeScheme ty -> TypeScheme ty -> Bool
+equivTypeScheme ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Distinct n => Foil.Scope n -> ty n -> ty n -> Bool) -> TypeScheme ty -> TypeScheme ty -> Bool
 equivTypeScheme alphaEquivFunc (TypeScheme binders1 ty1) (TypeScheme binders2 ty2) =
   case Foil.unifyPatterns binders1 binders2 of
       Foil.SameNameBinders{} ->
