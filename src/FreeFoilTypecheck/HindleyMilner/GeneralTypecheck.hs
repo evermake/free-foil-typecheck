@@ -221,21 +221,15 @@ instance
 
 equivHMType ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Distinct n => Foil.Scope n -> ty n -> ty n -> Bool) -> HMType ty -> HMType ty -> Bool
 equivHMType alphaEquivFunc t1 t2 =
-  case (toTypeScheme t1, toTypeScheme t2) of
-    (Just t1Scheme, Just t2Scheme) -> equivTypeScheme alphaEquivFunc t1Scheme t2Scheme
-    (Nothing, Nothing) -> 
-      let ty1 = unwrapMonoType t1
-          ty2 = unwrapMonoType t2
-      in alphaEquivFunc Foil.emptyScope ty1 ty2
-    (_, _) -> False
+  equivTypeScheme alphaEquivFunc (toTypeScheme t1) (toTypeScheme t2)
 
 unwrapMonoType:: HMType ty -> ty Foil.VoidS
 unwrapMonoType (MonoType ty) = ty
 unwrapMonoType (PolyType _) = undefined
    
-toTypeScheme :: HMType ty -> Maybe (TypeScheme ty)
-toTypeScheme (PolyType typeScheme) = Just typeScheme
-toTypeScheme (MonoType _) = Nothing
+toTypeScheme :: HMType ty -> TypeScheme ty
+toTypeScheme (PolyType typeScheme) = typeScheme
+toTypeScheme (MonoType ty) = TypeScheme Foil.NameBinderListEmpty ty
 
 equivTypeScheme ::(Foil.RelMonad Foil.Name ty) => (forall n. Foil.Distinct n => Foil.Scope n -> ty n -> ty n -> Bool) -> TypeScheme ty -> TypeScheme ty -> Bool
 equivTypeScheme alphaEquivFunc (TypeScheme binders1 ty1) (TypeScheme binders2 ty2) =
