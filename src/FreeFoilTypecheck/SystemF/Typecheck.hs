@@ -277,9 +277,10 @@ instance
           let actualType = FreeFoil.substitute (nameMapToScope scope) subst bodyType'
           return $ Term actualType
         _ -> Left "not a function"
-    ETAbsSig _body -> undefined
-      -- let a = body (Just (Term TType))
-      -- infer a
+    ETAbsSig body -> do
+      Scoped binder typeOfBody <- infer (body (Just (Term TType)))
+      case Foil.assertDistinct binder of
+        Foil.Distinct -> unsinkType scope typeOfBody
     TBoolSig -> Right (Term TBool)
     TNatSig -> Right (Term TNat)
     TUVarSig n -> Right (Term (TUVar n))
