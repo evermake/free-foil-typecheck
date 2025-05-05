@@ -311,7 +311,7 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       (binderType, bodyType) <- inferBody Nothing
       _ <- unifyHM fromTy (injectUType TNat)
       _ <- unifyHM toTy (injectUType TNat)
-      _ <- unifyHM binderType (injectUType TNat) -- ?
+      _ <- unifyHM binderType (injectUType TNat)
       return bodyType
     EAbsSig inferBody -> do
       (paramType, bodyType) <- inferBody Nothing
@@ -349,22 +349,18 @@ applySubstsFromContextToType type_ = do
 
 
 generalizeHM
-  :: (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder)
+  :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder)
   => UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig))
 generalizeHM whatTyp = do
+  unifyTypeCheck
   (TypingContext _ substs ctx _) <- get
   let whatTyp1 = applySubstsToType substs whatTyp
   let ctx' = fmap (applySubstsToHMType substs) ctx
   let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfHMType typ) [] ctx'
   let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
 
-  let whatTyp2 = runGeneralize whatFreeIdents whatTyp1
+  let whatTyp2 = generalize whatFreeIdents whatTyp1
   return whatTyp2
-
-  where
-    runGeneralize [] ty = (MonoType ty)
-    runGeneralize freeIdents ty = generalize freeIdents ty
-  -- enterScope xTyp TypeScheme (whatFreeIdents, whatTyp2) (reconstructType eExpr) -- xTyp is not binder but type
 
 
 unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
@@ -492,11 +488,11 @@ unify (c : cs) = do
   substs' <- unify (map (applySubstsToConstraint substs) cs)
   return (substs +++ substs')
 
--- unifyWith ::
---   [USubst_ (UType binder typeSig n)] ->
---   [Constraint' (UType binder typeSig n)] ->
---   Either String [USubst_ (UType binder typeSig n)]
--- unifyWith substs constraints = unify (map (applySubstsToConstraint substs) constraints)
+unifyWith :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) =>
+  [USubst_ (UType binder typeSig Foil.VoidS)] ->
+  [Constraint' (UType binder typeSig Foil.VoidS)] ->
+  TypeCheck (UType binder typeSig) n [USubst_ (UType binder typeSig Foil.VoidS)]
+unifyWith substs constraints = unify (map (applySubstsToConstraint substs) constraints)
 
 -- -- newtype TypeCheck n a = TypeCheck {runTypeCheck' :: TypingContext n -> Either String (a, TypingContext n)}
 -- --   deriving (Functor)
@@ -564,15 +560,15 @@ get = TypeCheck $ \tc -> Right (tc, tc)
 put :: TypingContext ty n -> TypeCheck ty n ()
 put new = TypeCheck $ \_old -> Right ((), new)
 
--- eitherToTypeCheck :: Either String a -> TypeCheck' ty n a
--- eitherToTypeCheck (Left err) = TypeCheck' $ \_tc -> Left err
--- eitherToTypeCheck (Right x) = TypeCheck' $ \tc -> Right (x, tc)
+eitherToTypeCheck :: Either String a -> TypeCheck (UType binder typeSig) n a
+eitherToTypeCheck (Left err) = TypeCheck $ \_tc -> Left err
+eitherToTypeCheck (Right x) = TypeCheck $ \tc -> Right (x, tc)
 
--- unifyTypeCheck :: TypeCheck' ty n ()
--- unifyTypeCheck = do
---   TypingContext' constraints substs ctx freshId <- get
---   substs' <- eitherToTypeCheck (unifyWith substs constraints)
---   put (TypingContext' [] (substs +++ substs') ctx freshId)
+unifyTypeCheck :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) => TypeCheck (UType binder typeSig) n ()
+unifyTypeCheck = do
+  TypingContext constraints substs ctx freshId <- get
+  substs' <- unifyWith substs constraints
+  put (TypingContext [] (substs +++ substs') ctx freshId)
 
 class TypedPattern ty binder where
   enterScopePattern :: binder n l -> HMType ty -> TypeCheck ty l a -> TypeCheck ty n a

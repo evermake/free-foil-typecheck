@@ -64,7 +64,8 @@ programTypesMatch actual expected = do
     False ->
       Left $
         unlines
-          [ "types do not match",
+          [
+            "types do not match",
             "expected:",
             show typeExpected,
             "but actual is:",
