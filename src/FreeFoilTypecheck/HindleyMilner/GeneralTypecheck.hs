@@ -367,9 +367,12 @@ generalizeHM whatTyp = do
   return whatTyp2
 
 unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
-unifyHM typ1 typ2 =
+unifyHM typ1 typ2 = do
   -- traceShow (unsafeCoerce (typ1, typ2) :: (UType FoilTypePattern TypeSig Foil.VoidS, UType FoilTypePattern TypeSig Foil.VoidS)) $ do
-  case (typ1, typ2) of
+  TypingContext {..} <- get
+  let typ1' = applySubstsToType tcSubsts typ1
+      typ2' = applySubstsToType tcSubsts typ2
+  case (typ1', typ2') of
     -- Case for unification variables
     (toUVarIdent -> Just x, r) -> addSubsts [(x, r)]
     (l, toUVarIdent -> Just x) -> addSubsts [(x, l)]
