@@ -5,7 +5,7 @@ import Data.List
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed, toTypeClosed)
-import FreeFoilTypecheck.HindleyMilner.GeneralTypecheck (allUVarsOfType, testInferTypeNewClosed, injectUType, equivHMType, alphaEquiv, generalize)
+import FreeFoilTypecheck.HindleyMilner.GeneralTypecheck (allUVarsOfType, testInferTypeNewClosed, injectUType', equivHMType, alphaEquiv, generalize, specialize)
 import System.Directory
 import System.FilePath
 import Test.Hspec
@@ -53,8 +53,8 @@ dirWalk filefunc top = do
 programTypesMatch :: String -> String -> Either String Bool
 programTypesMatch actual expected = do
   typeExpected <- toTypeClosed <$> pType tokensExpected
-  let vars = allUVarsOfType (injectUType typeExpected)
-  let genExpected = generalize vars (injectUType typeExpected)
+  let vars = allUVarsOfType (injectUType' typeExpected)
+  let genExpected = generalize vars (injectUType' typeExpected)
   exprActual <- toExpClosed <$> pExp tokensActual
   typeActual <- testInferTypeNewClosed exprActual
   let vars' = allUVarsOfType typeActual
@@ -67,9 +67,9 @@ programTypesMatch actual expected = do
           [
             "types do not match",
             "expected:",
-            show typeExpected,
+            show (specialize genExpected 1),
             "but actual is:",
-            show typeActual
+            show (specialize genActual 1)
           ]
   where
     tokensActual = myLexer actual

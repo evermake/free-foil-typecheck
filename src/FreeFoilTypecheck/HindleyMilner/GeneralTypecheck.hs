@@ -267,6 +267,11 @@ equivTypeScheme alphaEquivFunc (TypeScheme binders1 ty1) (TypeScheme binders2 ty
 injectUType :: (Bifunctor typeSig) => FreeFoil.AST binder typeSig n -> UType binder typeSig n
 injectUType = transAST L2
 
+injectUType' :: FreeFoil.AST binder TypeSig n -> UType binder TypeSig n
+injectUType' = transAST $ \case
+  TUVarSig m -> R2 (MetaVarSig m)
+  node -> L2 node
+
 -- L2 :: typeSig scope term -> (Sum typeSig MetaVarSig) scope term
 
 transAST ::
