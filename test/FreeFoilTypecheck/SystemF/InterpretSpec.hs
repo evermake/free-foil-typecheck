@@ -8,17 +8,29 @@ import Test.Hspec
 
 spec :: Spec
 spec = parallel $ do
-  describe "well-typed expressions" $ do
+  describe "well-typed expressions with generalization" $ do
     paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/SystemF/files/well-typed")
     forM_ paths $ \path -> it path $ do
       contents <- readFile path
       interpretGen contents `shouldSatisfy` isSuccess
 
-  describe "ill-typed expressions" $ do
+  describe "ill-typed expressions with generalization" $ do
     paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/SystemF/files/ill-typed")
     forM_ paths $ \path -> it path $ do
       contents <- readFile path
       interpretGen contents `shouldSatisfy` isTypeError
+
+  describe "ill-typed expressions without generalization" $ do
+    paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/SystemF/files/ill-typed")
+    forM_ paths $ \path -> it path $ do
+      contents <- readFile path
+      interpret contents `shouldSatisfy` isTypeError
+
+  describe "well-typed expressions without generalization" $ do
+    paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/SystemF/files/well-typed")
+    forM_ paths $ \path -> it path $ do
+      contents <- readFile path
+      interpret contents `shouldSatisfy` isSuccess
 
 isSuccess :: Result -> Bool
 isSuccess Success {} = True

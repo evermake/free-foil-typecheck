@@ -2,12 +2,12 @@
 
 module FreeFoilTypecheck.SystemF.Eval where
 
-import           Control.Monad           (forM)
-import           Control.Monad.Foil      (Distinct, addSubst, identitySubst)
--- import qualified Control.Monad.Foil          as Foil
-import           Control.Monad.Free.Foil (AST (Var), substitute)
-import           FreeFoilTypecheck.SystemF.Syntax
-import           FreeFoilTypecheck.SystemF.Typecheck            (Context, nameMapToScope)
+import Control.Monad (forM)
+import Control.Monad.Foil (Distinct, addSubst, identitySubst)
+import Control.Monad.Free.Foil (AST (Var), substitute)
+import FreeFoilTypecheck.SystemF.Syntax
+import FreeFoilTypecheck.SystemF.Typecheck (Context)
+import FreeFoilTypecheck.SystemF.FreeFoilExt (nameMapToScope)
 
 -- $setup
 -- >>> :set -XOverloadedStrings

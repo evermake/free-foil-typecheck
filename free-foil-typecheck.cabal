@@ -1,6 +1,6 @@
 cabal-version: 1.24
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -39,6 +39,7 @@ library
       FreeFoilTypecheck.HindleyMilner.Syntax
       FreeFoilTypecheck.HindleyMilner.Typecheck
       FreeFoilTypecheck.SystemF.Eval
+      FreeFoilTypecheck.SystemF.FreeFoilExt
       FreeFoilTypecheck.SystemF.Interpret
       FreeFoilTypecheck.SystemF.Parser.Abs
       FreeFoilTypecheck.SystemF.Parser.Lex
@@ -48,6 +49,8 @@ library
       FreeFoilTypecheck.SystemF.Syntax.Pattern
       FreeFoilTypecheck.SystemF.Syntax.Term
       FreeFoilTypecheck.SystemF.Typecheck
+      FreeFoilTypecheck.SystemF.TypecheckGen
+      FreeFoilTypecheck.SystemF.TypingSig
   other-modules:
       Paths_free_foil_typecheck
   hs-source-dirs:

@@ -6,8 +6,9 @@ import Control.Monad.Foil (emptyNameMap, S(VoidS))
 import FreeFoilTypecheck.SystemF.Eval
 import FreeFoilTypecheck.SystemF.Parser.Par
 import FreeFoilTypecheck.SystemF.Syntax (toTermClosed, Term(..))
-import FreeFoilTypecheck.SystemF.Typecheck
-    ( CheckInfer, inferType, bidirectionaCheckInfer, infer)
+import FreeFoilTypecheck.SystemF.Typecheck (inferType)
+import FreeFoilTypecheck.SystemF.TypecheckGen (CheckInfer, bidirectionalCheckInfer, infer)
+import FreeFoilTypecheck.SystemF.TypingSig ()
 
 data Result
   = Success String -- Output of evaluation.
@@ -37,7 +38,7 @@ interpretGen input =
   case toTermClosed <$> pTerm tokens of
     Left err -> Failure ParsingError ("Parsing error: " ++ err)
     Right et@(Term e) -> case do
-      checkInfer <- bidirectionaCheckInfer emptyNameMap e :: Either String (CheckInfer Term 'VoidS)
+      checkInfer <- bidirectionalCheckInfer emptyNameMap e :: Either String (CheckInfer Term 'VoidS)
       infer checkInfer of
       Left err -> Failure TypecheckingError ("Typechecking error: " ++ err)
       Right _type -> case newEval emptyNameMap et of
