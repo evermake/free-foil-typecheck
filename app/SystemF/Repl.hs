@@ -1,8 +1,8 @@
 {-# LANGUAGE DataKinds #-}
-
+{-# LANGUAGE TypeApplications #-}
 module Main where
 
-import Control.Monad.Foil (S (VoidS), emptyNameMap)
+import Control.Monad.Foil (emptyNameMap)
 import FreeFoilTypecheck.SystemF.Eval
 import FreeFoilTypecheck.SystemF.Parser.Par
 import FreeFoilTypecheck.SystemF.Syntax (Term (..), toTermClosed)
@@ -39,7 +39,7 @@ genRepl input =
   case toTermClosed <$> pTerm tokens of
     Left err -> "Parsing error: " ++ err
     Right et@(Term e) -> case do
-      checkInfer <- bidirectionalCheckInfer emptyNameMap e :: Either String (CheckInfer Term 'VoidS)
+      checkInfer <- bidirectionalCheckInfer @Term emptyNameMap e
       infer checkInfer of
       Left err -> "Typechecking error: " ++ err
       Right _type -> case newEval emptyNameMap et of

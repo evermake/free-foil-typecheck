@@ -15,32 +15,32 @@
 
 module FreeFoilTypecheck.SystemF.TypingSig where
 
-import FreeFoilTypecheck.SystemF.TypecheckGen 
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
-import FreeFoilTypecheck.SystemF.Syntax
 import FreeFoilTypecheck.SystemF.FreeFoilExt
+import FreeFoilTypecheck.SystemF.Syntax
+import FreeFoilTypecheck.SystemF.TypecheckGen
 
 --------------------------------------------------------------------------------
+
 -- * TypingSig Instance for System F
+
 --------------------------------------------------------------------------------
 
 instance
   (forall n. Show (TypeError (Term n))) =>
   TypingSig (FoilPattern Term) Term TermSig
   where
-  
   --------------------------------------------------------------------------------
   -- Type Checking Rules
   --------------------------------------------------------------------------------
-  
+
   checkSig scope = \case
     -- Type abstraction: Γ ⊢ ΛX.t ⇐ ∀X.T
     ETAbsSig body -> \case
       Term (TForAll x bodyType) ->
         check (body (Just (Term TType))) (Scoped x (Term bodyType))
       _ -> Left "unexpected type abstraction"
-    
     -- Type application
     ETAppSig e t -> \expectedType -> do
       check t (Term TType)
@@ -51,7 +51,7 @@ instance
           let actualType = FreeFoil.substitute (nameMapToScope scope) subst bodyType
           (scope, Term actualType) `shouldBe` expectedType
         _ -> Left "expected a type abstraction"
-    
+
     -- Lambda abstraction: Γ ⊢ λx:A. t ⇐ A → B
     EAbsSig body -> \case
       Term (TArrow x expectedBodyType) -> do
@@ -61,7 +61,6 @@ instance
             b' <- unsinkType scope b
             (scope, b') `shouldBe` Term expectedBodyType
       t -> Left $ "unexpected abstraction" <> show t
-    
     -- Let binding
     ELetSig e body -> \expectedType -> do
       etype <- infer e
@@ -81,36 +80,37 @@ instance
     ETrueSig -> return (Term TBool)
     EFalseSig -> return (Term TBool)
     ENatSig _ -> return (Term TNat)
-    
     -- Arithmetic operations
     EAddSig l r -> do
       check l (Term TNat)
       check r (Term TNat)
       return (Term TNat)
-      
     ESubSig l r -> do
       check l (Term TNat)
       check r (Term TNat)
       return (Term TNat)
-    
+
     -- Conditionals
     EIfSig cond thenBranch elseBranch -> do
       check cond (Term TBool)
       thenType <- infer thenBranch
       check elseBranch thenType
       return thenType
-    
+
     -- Zero test
     EIsZeroSig e -> do
       check e (Term TNat)
       return (Term TBool)
-    
+
     -- Type annotation
+    -- t : T
+    -- T : Type
     ETypedSig e t -> do
-      t' <- infer t
+      check t (Term TType)
+      let t' = Term (getTerm t)
       check e t'
       return t'
-    
+
     -- Let binding: Γ ⊢ let x = t₁ in t₂ ⇒ T₂
     ELetSig e body -> do
       a <- infer e
@@ -118,7 +118,7 @@ instance
       case Foil.assertDistinct c of
         Foil.Distinct ->
           unsinkType scope bodyType
-    
+
     -- For loop
     EForSig e1 e2 body -> do
       check e1 (Term TNat)
@@ -135,7 +135,6 @@ instance
           check t2 (Term a)
           return (Term b)
         _ -> Left "not a function"
-    
     -- Lambda abstraction (with annotation)
     EAbsSig body -> do
       bodyType <- infer (body Nothing)
@@ -146,9 +145,9 @@ instance
               Term bodyType'' <- unsinkType scope bodyType'
               return (Term (TArrow argType bodyType''))
         _ -> Left "cannot infer type of unannotated lambda"
-    
+
     -- Type application
-    ETAppSig body arg -> do 
+    ETAppSig body arg -> do
       check arg (Term TType)
       (Term argType) <- infer arg
       bodyType <- infer body
@@ -158,37 +157,40 @@ instance
           let actualType = FreeFoil.substitute (nameMapToScope scope) subst bodyType'
           return $ Term actualType
         _ -> Left "expected a polymorphic type"
-    
+
     -- Type abstraction
+    -- ΛX.λx.x  :  forall X. X -> X
+    -- body = λx.x : X -> X
     ETAbsSig body -> do
-      Scoped binder typeOfBody <- infer (body (Just (Term TType)))
+      Scoped binder (Term typeOfBody) <- infer (body (Just (Term TType)))
       case Foil.assertDistinct binder of
-        Foil.Distinct -> unsinkType scope typeOfBody
-    
+        Foil.Distinct -> return (Term (TForAll binder typeOfBody))
+
     -- Type constructors
-    TBoolSig -> Right (Term TBool)
-    TNatSig -> Right (Term TNat)
-    TUVarSig n -> Right (Term (TUVar n))
+    TBoolSig -> Right (Term TType)
+    TNatSig -> Right (Term TType)
+    TUVarSig{} -> Right (Term TType)
     TTypeSig -> Right (Term TType)
-    
     -- Type-level forall
-    TForAllSig _body -> undefined -- TODO implement
-    -- TForAllSig body -> do
-    --   Scoped binder (Term innerType) <- infer (body (Just (Term TType)))
-    --   case Foil.assertDistinct binder of
-    --     Foil.Distinct -> 
-    --       return (Term (TForAll binder innerType))
-    
+    TForAllSig body -> do -- forall X. T
+      Scoped _binder _bodyType <- infer (body (Just (Term TType)))
+      -- TODO: check that bodyType is just Type
+      return (Term TType)
+
     -- Arrow type
     TArrowSig l r -> do
-      (Term lt) <- infer l
-      (Term rt) <- infer r
-      Right (Term (TArrow lt rt))
+      check l (Term TType)
+      check r (Term TType)
+      Right (Term TType)
 
 type Context n = Foil.NameMap n (Term n)
+
 type Context' ty n = Foil.NameMap n (ty n)
+
 --------------------------------------------------------------------------------
+
 -- * Utility Functions
+
 --------------------------------------------------------------------------------
 
 -- | Unsink a type from a larger scope to a smaller one
@@ -203,7 +205,9 @@ convertTermToAST :: Term n -> FreeFoil.AST (FoilPattern Term) TermSig n
 convertTermToAST (Term ast) = ast
 
 --------------------------------------------------------------------------------
+
 -- * Typeclass Instances
+
 --------------------------------------------------------------------------------
 
 instance HasExactlyOneBinder (FoilPattern ty) where
@@ -219,9 +223,9 @@ instance HasTrivialBinder (FoilPattern Term) where
 instance TypedPattern ty (FoilPattern ty) where
   extractPatternType (FoilPatternVar _) = Nothing
   extractPatternType (FoilPatternAsc _ ty) = Just ty
-  extractTypedBinders (FoilPatternVar binder) ty = 
+  extractTypedBinders (FoilPatternVar binder) ty =
     TypedNameBindersCons binder ty TypedNameBindersEmpty
-  extractTypedBinders (FoilPatternAsc binder ty) _ = 
+  extractTypedBinders (FoilPatternAsc binder ty) _ =
     TypedNameBindersCons binder ty TypedNameBindersEmpty
 
 deriving instance AlphaEquiv Term
