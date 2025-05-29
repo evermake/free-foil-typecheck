@@ -1,11 +1,11 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module FreeFoilTypecheck.HindleyMilner.Syntax where
@@ -183,19 +183,3 @@ instance Show (Type n) where
 
 instance Eq (Type Foil.VoidS) where
   (==) = alphaEquiv Foil.emptyScope
-
--- ** Alpha-equivalence for polytypes
-
--- ∀x₁.∀x₂. x₁ → x₂
--- ∀x₂.∀x₁. x₁ → x₂
--- ∀{x₁, x₂}. x₁ → x₂
--- ∀{x₁, x₂}. x₂ → x₁
-
---  T₂ = [x₁ ↦ yᵢ₁, x₂ ↦ yᵢ₂, …, xₙ ↦ y_ᵢₙ]T₁
---    {yᵢ₁, yᵢ₂, …, yᵢₙ} = {y₁, …, yₙ}
--- ——————————————————————————————————————————
--- ∀{x₁, …, xₙ}. T₁  =  ∀{y₁, …, yₙ}. T₂
-
-
--- alphaEquivTypes :: Foil.Scope n -> Type n -> Type n -> Bool
--- alphaEquivTypes = _

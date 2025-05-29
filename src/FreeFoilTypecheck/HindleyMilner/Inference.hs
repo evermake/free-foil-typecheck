@@ -155,11 +155,6 @@ instance Monad (TypeInferencer n) where
     (x, ctx') <- g ctx
     runTypeInferencer (f x) ctx'
 
--- evalTypeCheck :: TypeCheck Foil.VoidS a -> Either String a
--- evalTypeCheck tc = do
---   (result, _ctx) <- runTypeCheck tc initialTypingContext
---   return result
-
 evalTypeInferencer :: TypeInferencer Foil.VoidS a -> Either String a
 evalTypeInferencer ti = do
   (result, _ctx) <- runTypeInferencer ti initialTypingContext
@@ -174,17 +169,6 @@ gets f = TypeInferencer $ \ctx -> Right (f ctx, ctx)
 put :: TypingContext n -> TypeInferencer n ()
 put newCtx = TypeInferencer $ \_old -> Right ((), newCtx)
 
-addLevel :: Int -> TypeInferencer n ()
-addLevel diff = do
-  ctx <- get
-  put ctx {tcLevel = tcLevel ctx + diff}
-
-incrLevel :: TypeInferencer n ()
-incrLevel = addLevel 1
-
-decrLevel :: TypeInferencer n ()
-decrLevel = addLevel (-1)
-
 fromEither :: Either String a -> TypeInferencer n a
 fromEither (Left err) = TypeInferencer $ \_ctx -> Left err
 fromEither (Right x) = TypeInferencer $ \ctx -> Right (x, ctx)
@@ -197,6 +181,14 @@ enterScope binder type_ action = do
   (x, ctx'') <- fromEither $ runTypeInferencer action ctx'
   let (TypingEnv nameMap'') = tcEnv ctx''
   put ctx'' {tcEnv = TypingEnv (popNameBinder binder nameMap'')}
+  return x
+
+enterLevel :: TypeInferencer n a -> TypeInferencer n a
+enterLevel action = do
+  ctx <- get
+  let ctx' = ctx {tcLevel = tcLevel ctx + 1}
+  (x, ctx'') <- fromEither $ runTypeInferencer action ctx'
+  put ctx'' {tcLevel = tcLevel ctx'' - 1}
   return x
 
 addConstraints :: [(Type', Type')] -> TypeInferencer n ()
@@ -258,7 +250,17 @@ unify = do
         tcEnv = env'
       }
 
--- TODO: document and cover with tests.
+-- Alpha-equivalence for polytypes
+--
+-- ∀x₁.∀x₂. x₁ → x₂
+-- ∀x₂.∀x₁. x₁ → x₂
+-- ∀{x₁, x₂}. x₁ → x₂
+-- ∀{x₁, x₂}. x₂ → x₁
+--
+--  T₂ = [x₁ ↦ yᵢ₁, x₂ ↦ yᵢ₂, …, xₙ ↦ y_ᵢₙ]T₁
+--    {yᵢ₁, yᵢ₂, …, yᵢₙ} = {y₁, …, yₙ}
+-- ——————————————————————————————————————————
+-- ∀{x₁, …, xₙ}. T₁  =  ∀{y₁, …, yₙ}. T₂
 alphaEquivPolyTypes :: Type' -> Type' -> TypeInferencer n Bool
 alphaEquivPolyTypes l r = do
   (l', xs) <- specialize l
@@ -394,12 +396,14 @@ inferType (FreeFoil.Var x) = do
   TypingEnv env <- gets tcEnv
   specialize_ (Foil.lookupName x env)
 inferType (ELet exprBinded (FoilPatternVar x) expr) = do
-  incrLevel
-  bindedType <- inferType exprBinded
-  decrLevel
+  bindedType <-
+    enterLevel $
+      inferType exprBinded
   unify
   subst <- gets tcSubst
-  bindedTypeGeneral <- generalize $ applySubst subst bindedType
+  bindedTypeGeneral <-
+    generalize $
+      applySubst subst bindedType
   enterScope x bindedTypeGeneral $
     inferType expr
 inferType (EAdd lhs rhs) = do
