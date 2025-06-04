@@ -169,9 +169,8 @@ fromType =
 
 -- | Parse scope-safe terms via raw representation.
 --
--- TODO: fix this example
--- -- >>> fromString "let x = 2 + 2 in let y = x - 1 in let x = 3 in y + x + y" :: Type Foil.VoidS
--- -- let x0 = 2 + 2 in let x1 = x0 - 1 in let x2 = 3 in x1 + x2 + x1
+-- >>> fromString "forall x. x -> ?u1 -> Bool -> Nat" :: Type Foil.VoidS
+-- forall x0 . x0 -> ?u1 -> Bool -> Nat
 instance IsString (Type Foil.VoidS) where
   fromString input = case Raw.pType (Raw.myLexer input) of
     Left err -> error ("could not parse expression: " <> input <> "\n  " <> err)
