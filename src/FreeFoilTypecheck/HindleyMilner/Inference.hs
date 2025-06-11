@@ -221,9 +221,9 @@ specialize = \case
   type_ -> return (type_, [])
 
 specialize_ :: Type' -> TypeInferencer n Type'
-specialize_ type_ = do
-  (type', _idents) <- specialize type_
-  return type'
+specialize_ t = do
+  (t', _idents) <- specialize t
+  return t'
 
 generalize :: Type' -> TypeInferencer n Type'
 generalize type_ = do
@@ -380,11 +380,11 @@ generalizeWithIdents = go Foil.emptyScope
   where
     go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> Type n -> Type n
     go _ [] t = t
-    go ctx (x : xs) t = Foil.withFresh ctx $ \binder ->
-      let newScope = Foil.extendScope binder ctx
+    go scope (x : xs) t = Foil.withFresh scope $ \binder ->
+      let extendedScope = Foil.extendScope binder scope
           x' = FreeFoil.Var (Foil.nameOf binder)
           t' = applySubst (singleSubst x x') (Foil.sink t)
-       in TForAll (FoilTPatternVar binder) (go newScope xs t')
+       in TForAll (FoilTPatternVar binder) (go extendedScope xs t')
 
 --------------------------------------------------------------------------------
 
