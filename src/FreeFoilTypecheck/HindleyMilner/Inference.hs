@@ -250,12 +250,10 @@ unify = do
         tcEnv = env'
       }
 
--- Alpha-equivalence for polytypes
+-- | Alpha-equivalence for polytypes.
 --
--- ∀x₁.∀x₂. x₁ → x₂
--- ∀x₂.∀x₁. x₁ → x₂
--- ∀{x₁, x₂}. x₁ → x₂
--- ∀{x₁, x₂}. x₂ → x₁
+-- ∀x₁.∀x₂.   x₁ → x₂  ≠  ∀x₂.∀x₁.   x₁ → x₂
+-- ∀{x₁, x₂}. x₁ → x₂  ≠  ∀{x₁, x₂}. x₂ → x₁
 --
 --  T₂ = [x₁ ↦ yᵢ₁, x₂ ↦ yᵢ₂, …, xₙ ↦ y_ᵢₙ]T₁
 --    {yᵢ₁, yᵢ₂, …, yᵢₙ} = {y₁, …, yₙ}

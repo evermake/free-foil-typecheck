@@ -11,6 +11,10 @@ import System.Directory
 import System.FilePath
 import Test.Hspec
 
+-- $setup
+-- >>> :set -XOverloadedStrings
+-- >>> import FreeFoilTypecheck.HindleyMilner.Syntax (Type', Exp')
+
 spec :: Spec
 spec = parallel $ do
   describe "well-typed expressions" $ do
@@ -18,7 +22,7 @@ spec = parallel $ do
     forM_ (sort (filter (\p -> not (".expected.lam" `isSuffixOf` p)) paths)) $ \path -> it path $ do
       contents <- readFile path
       expectedTypeContents <- readFile (replaceExtension path ".expected.lam")
-      programTypesMatch contents expectedTypeContents `shouldBe` Right True
+      expTypeMatches contents expectedTypeContents `shouldBe` Right True
 
   describe "ill-typed expressions" $ do
     paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files/ill-typed")
@@ -48,14 +52,41 @@ dirWalk filefunc top = do
       included <- filefunc top
       return ([top | included])
 
-programTypesMatch :: String -> String -> Either String Bool
-programTypesMatch actual expected = do
-  typeExpected <- toTypeClosed <$> pType tokensExpected
-  let typeExpectedGeneral = generalizeWithIdents (Set.toList (freeVars typeExpected)) typeExpected
-  exprActual <- toExpClosed <$> pExp tokensActual
-  typeActual <- inferTypeClosed exprActual
-  let typeActualGeneral = generalizeWithIdents (Set.toList (freeVars typeActual)) typeActual
-  case evalTypeInferencer $ alphaEquivPolyTypes typeActualGeneral typeExpectedGeneral of
+-- | Checks whether the expression matches the expected type by parsing
+-- the expression source code and inferring its' type, then parsing
+-- the expected type source code and comparing the obtained types.
+--
+-- Using `FreeFoil.alphaEquiv` wouldn't work as expected, as it only compares
+-- the AST structure and `FreeFoil.Var`s, and doesn't take into account values
+-- of the literals:
+--
+-- >>> FreeFoil.alphaEquiv Foil.emptyScope ("?a -> ?a" :: Type') ("?a -> ?b" :: Type')
+-- True
+-- >>> FreeFoil.alphaEquiv Foil.emptyScope ("1" :: Exp') ("2" :: Exp')
+-- True
+--
+-- We could generalize all type variables and compare the generalized types,
+-- however, this would not work either as the order of generalization is not
+-- determined, and though order of quantifiers doesn't change the meaning,
+-- it does affect alpha equivalence:
+--
+-- >>> FreeFoil.alphaEquiv Foil.emptyScope ("forall x. (forall y. x -> y)" :: Type') ("forall y. (forall x. x -> y)" :: Type')
+-- False
+--
+-- Therefore, we should use the `alphaEquivPolyTypes` function to compare the
+-- types.
+expTypeMatches :: String -> String -> Either String Bool
+expTypeMatches expSource expectedTypeSource = do
+  -- parse
+  expr <- toExpClosed <$> pExp (myLexer expSource)
+  expectedType <- toTypeClosed <$> pType (myLexer expectedTypeSource)
+  -- infer
+  actualType <- inferTypeClosed expr
+  -- generalize
+  let expectedType' = generalizeWithIdents (Set.toList (freeVars expectedType)) expectedType
+  let actualType' = generalizeWithIdents (Set.toList (freeVars actualType)) actualType
+  -- compare
+  case evalTypeInferencer $ alphaEquivPolyTypes expectedType' actualType' of
     Left err -> Left err
     Right True -> Right True
     Right False ->
@@ -63,10 +94,7 @@ programTypesMatch actual expected = do
         unlines
           [ "types do not match",
             "expected:",
-            show typeExpected,
+            show expectedType,
             "but actual is:",
-            show typeActual
+            show actualType
           ]
-  where
-    tokensActual = myLexer actual
-    tokensExpected = myLexer expected

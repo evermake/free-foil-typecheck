@@ -57,6 +57,9 @@ deriveCoSinkable ''Raw.Ident ''Raw.Pattern
 mkToFoilPattern ''Raw.Ident ''Raw.Pattern
 mkFromFoilPattern ''Raw.Ident ''Raw.Pattern
 
+instance Foil.UnifiablePattern FoilPattern where
+  unifyPatterns (FoilPatternVar x) (FoilPatternVar y) = Foil.unifyNameBinders x y
+
 -- * Generated code (types)
 
 -- ** Signature
@@ -91,6 +94,8 @@ instance Foil.UnifiablePattern FoilTypePattern where
 -- * User-defined code
 
 type Exp n = AST FoilPattern ExpSig n
+
+type Exp' = Exp Foil.VoidS
 
 type Type n = AST FoilTypePattern TypeSig n
 
