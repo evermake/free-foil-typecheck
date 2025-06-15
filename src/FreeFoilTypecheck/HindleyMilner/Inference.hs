@@ -251,18 +251,10 @@ unify = do
       }
 
 -- | Alpha-equivalence for polytypes.
---
--- ∀x₁.∀x₂.   x₁ → x₂  ≠  ∀x₂.∀x₁.   x₁ → x₂
--- ∀{x₁, x₂}. x₁ → x₂  ≠  ∀{x₁, x₂}. x₂ → x₁
---
---  T₂ = [x₁ ↦ yᵢ₁, x₂ ↦ yᵢ₂, …, xₙ ↦ y_ᵢₙ]T₁
---    {yᵢ₁, yᵢ₂, …, yᵢₙ} = {y₁, …, yₙ}
--- ——————————————————————————————————————————
--- ∀{x₁, …, xₙ}. T₁  =  ∀{y₁, …, yₙ}. T₂
-alphaEquivPolyTypes :: Type' -> Type' -> TypeInferencer n Bool
-alphaEquivPolyTypes l r = do
-  (l', xs) <- specialize l
-  (r', ys) <- specialize r
+alphaEquivPoly :: Type' -> Type' -> TypeInferencer n Bool
+alphaEquivPoly l r = do
+  (l', xs) <- specialize $ genAll l
+  (r', ys) <- specialize $ genAll r
   if length xs /= length ys
     then return False
     else do
@@ -274,6 +266,8 @@ alphaEquivPolyTypes l r = do
               allXs = List.sort xs == List.sort (map fst matchings)
               allYs = List.sort ys == List.sort (map snd matchings)
           return (allXs && allYs)
+  where
+    genAll t = generalizeWithIdents (Set.toList (freeVars t)) t
 
 -- | Log the current TypingContext using Debug.Trace.
 logContext :: String -> TypeInferencer n ()

@@ -2,8 +2,7 @@ module FreeFoilTypecheck.HindleyMilner.InferenceSpec where
 
 import Control.Monad (forM_)
 import Data.List
-import qualified Data.Set as Set
-import FreeFoilTypecheck.HindleyMilner.Inference (alphaEquivPolyTypes, evalTypeInferencer, freeVars, generalizeWithIdents, inferTypeClosed)
+import FreeFoilTypecheck.HindleyMilner.Inference (alphaEquivPoly, evalTypeInferencer, inferTypeClosed)
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed, toTypeClosed)
@@ -73,7 +72,7 @@ dirWalk filefunc top = do
 -- >>> FreeFoil.alphaEquiv Foil.emptyScope ("forall x. (forall y. x -> y)" :: Type') ("forall y. (forall x. x -> y)" :: Type')
 -- False
 --
--- Therefore, we should use the `alphaEquivPolyTypes` function to compare the
+-- Therefore, we should use the `alphaEquivPoly` function to compare the
 -- types.
 expTypeMatches :: String -> String -> Either String Bool
 expTypeMatches expSource expectedTypeSource = do
@@ -82,11 +81,8 @@ expTypeMatches expSource expectedTypeSource = do
   expectedType <- toTypeClosed <$> pType (myLexer expectedTypeSource)
   -- infer
   actualType <- inferTypeClosed expr
-  -- generalize
-  let expectedType' = generalizeWithIdents (Set.toList (freeVars expectedType)) expectedType
-  let actualType' = generalizeWithIdents (Set.toList (freeVars actualType)) actualType
   -- compare
-  case evalTypeInferencer $ alphaEquivPolyTypes expectedType' actualType' of
+  case evalTypeInferencer $ alphaEquivPoly expectedType actualType of
     Left err -> Left err
     Right True -> Right True
     Right False ->
