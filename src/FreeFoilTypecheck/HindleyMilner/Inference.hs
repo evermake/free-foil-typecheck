@@ -339,21 +339,15 @@ unifyConstraint levelsMap (Constraint constr) =
     (lhs, rhs) -> Left ("cannot unify " ++ show lhs ++ show rhs)
 
 unifyWithUVar :: IdentLevelMap -> Raw.UVarIdent -> Type' -> Either String (Subst', IdentLevelMap)
-unifyWithUVar levelsMap x type_ =
-  if hasFreeVar x type_
-    then Left "occurs check failed"
-    else
-      let updatedLevelsMap = case HashMap.lookup x levelsMap of
-            Nothing -> Left "unification variable not found in levels map"
-            Just xLevel ->
-              Right $
-                HashMap.unionWith
-                  min
-                  levelsMap
-                  (HashMap.fromList [(var, xLevel) | var <- Set.toList (freeVars type_)])
-       in case updatedLevelsMap of
-            Left err -> Left err
-            Right newLevelsMap -> Right (singleSubst x type_, newLevelsMap)
+unifyWithUVar levelsMap x type_
+  | hasFreeVar x type_ = Left "occurs check failed"
+  | otherwise = case HashMap.lookup x levelsMap of
+      Nothing -> Left "type variable w/o level"
+      Just xLevel ->
+        let varsList = Set.toList (freeVars type_)
+            varsLevels = HashMap.fromList [(var, xLevel) | var <- varsList]
+            updatedLevels = HashMap.unionWith min levelsMap varsLevels
+         in Right (singleSubst x type_, updatedLevels)
 
 --------------------------------------------------------------------------------
 
