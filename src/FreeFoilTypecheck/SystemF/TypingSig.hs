@@ -210,10 +210,6 @@ convertTermToAST (Term ast) = ast
 
 --------------------------------------------------------------------------------
 
-instance HasExactlyOneBinder (FoilPattern ty) where
-  extractExactlyOneBinder (FoilPatternVar x) = x
-  extractExactlyOneBinder (FoilPatternAsc p _ty) = extractExactlyOneBinder p
-
 instance HasTrivialBinder (FoilPattern Term) where
   triviallyScoped scope type_ =
     case triviallyScoped scope type_ of
