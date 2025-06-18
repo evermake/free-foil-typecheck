@@ -2,7 +2,7 @@ module FreeFoilTypecheck.HindleyMilner.InferenceSpec where
 
 import Control.Monad (forM_)
 import Data.List
-import FreeFoilTypecheck.HindleyMilner.Inference (alphaEquivPoly, evalTypeInferencer, inferTypeClosed)
+import FreeFoilTypecheck.HindleyMilner.Inference (equivPoly, evalTypeInferencer, inferTypeClosed)
 import FreeFoilTypecheck.HindleyMilner.Interpret
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Syntax (toExpClosed, toTypeClosed)
@@ -72,7 +72,7 @@ dirWalk filefunc top = do
 -- >>> FreeFoil.alphaEquiv Foil.emptyScope ("forall x. (forall y. x -> y)" :: Type') ("forall y. (forall x. x -> y)" :: Type')
 -- False
 --
--- Therefore, we should use the `alphaEquivPoly` function to compare the
+-- Therefore, we should use the `equivPoly` function to compare the
 -- types.
 expTypeMatches :: String -> String -> Either String Bool
 expTypeMatches expSource expectedTypeSource = do
@@ -82,7 +82,7 @@ expTypeMatches expSource expectedTypeSource = do
   -- infer
   actualType <- inferTypeClosed expr
   -- compare
-  case evalTypeInferencer $ alphaEquivPoly expectedType actualType of
+  case evalTypeInferencer $ equivPoly expectedType actualType of
     Left err -> Left err
     Right True -> Right True
     Right False ->

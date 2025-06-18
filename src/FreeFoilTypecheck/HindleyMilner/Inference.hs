@@ -250,9 +250,9 @@ unify = do
         tcEnv = env'
       }
 
--- | Alpha-equivalence for polytypes.
-alphaEquivPoly :: Type' -> Type' -> TypeInferencer n Bool
-alphaEquivPoly l r = do
+-- | Equivalence for polytypes.
+equivPoly :: Type' -> Type' -> TypeInferencer n Bool
+equivPoly l r = do
   (l', xs) <- specialize $ genAll l
   (r', ys) <- specialize $ genAll r
   if length xs /= length ys
