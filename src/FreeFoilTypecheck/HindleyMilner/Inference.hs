@@ -95,8 +95,8 @@ instance Typed (TypingEnv n) where
 
   freeVars (TypingEnv env) = Set.unions $ freeVars <$> env
 
-nullSubst :: Subst Foil.VoidS
-nullSubst = Subst Map.empty
+idSubst :: Subst Foil.VoidS
+idSubst = Subst Map.empty
 
 singleSubst :: (Foil.Distinct n) => Raw.UVarIdent -> Type n -> Subst n
 singleSubst ident type_ = Subst (Map.singleton ident type_)
@@ -308,7 +308,7 @@ unifyConstraintsWithSubst levelsMap constrs subst = do
   return (composeSubst subst subst', levelsMap')
 
 unifyConstraints :: IdentLevelMap -> [Constraint'] -> Either String (Subst', IdentLevelMap)
-unifyConstraints levelsMap [] = return (nullSubst, levelsMap)
+unifyConstraints levelsMap [] = return (idSubst, levelsMap)
 unifyConstraints levelsMap (c : cs) = do
   (subst', levelsMap') <- unifyConstraint levelsMap c
   (subst'', levelsMap'') <- unifyConstraintsWithSubst levelsMap' cs subst'
@@ -320,7 +320,7 @@ unifyConstraint levelsMap (Constraint constr) =
     -- Case for unification variables
     (TUVar x, r) -> case r of
       TUVar y
-        | x == y -> Right (nullSubst, levelsMap)
+        | x == y -> Right (idSubst, levelsMap)
         | otherwise -> unifyWithUVar levelsMap x r
       _ -> unifyWithUVar levelsMap x r
     (l, TUVar x) -> unifyWithUVar levelsMap x l
