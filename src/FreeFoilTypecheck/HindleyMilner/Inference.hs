@@ -324,9 +324,6 @@ unifyConstraint levelsMap (Constraint constr) =
         | otherwise -> unifyWithUVar levelsMap x r
       _ -> unifyWithUVar levelsMap x r
     (l, TUVar x) -> unifyWithUVar levelsMap x l
-    -- Case for Free Foil variables (not supported for now)
-    (FreeFoil.Var x, FreeFoil.Var y)
-      | x == y -> Left "unification of bound variables is not supported"
     -- Case of non-trivial arbitrary nodes
     (FreeFoil.Node l, FreeFoil.Node r) ->
       -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
