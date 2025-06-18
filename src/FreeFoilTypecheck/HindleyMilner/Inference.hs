@@ -378,6 +378,18 @@ inferType (ENat _) = return TNat
 inferType (FreeFoil.Var x) = do
   TypingEnv env <- gets tcEnv
   specialize_ (Foil.lookupName x env)
+inferType (EAbs (FoilPatternVar x) eBody) = do
+  paramType <- freshUVar_
+  bodyTyp <-
+    enterScope x paramType $
+      inferType eBody
+  return (TArrow paramType bodyTyp)
+inferType (EApp eAbs eArg) = do
+  absTyp <- inferType eAbs
+  argTyp <- inferType eArg
+  resultTyp <- freshUVar_
+  addConstraints [(absTyp, TArrow argTyp resultTyp)]
+  return resultTyp
 inferType (ELet exprBinded (FoilPatternVar x) expr) = do
   bindedType <-
     enterLevel $
@@ -409,18 +421,6 @@ inferType (EIsZero e) = do
   eTyp <- inferType e
   addConstraints [(eTyp, TNat)]
   return TBool
-inferType (EAbs (FoilPatternVar x) eBody) = do
-  paramType <- freshUVar_
-  bodyTyp <-
-    enterScope x paramType $
-      inferType eBody
-  return (TArrow paramType bodyTyp)
-inferType (EApp eAbs eArg) = do
-  absTyp <- inferType eAbs
-  argTyp <- inferType eArg
-  resultTyp <- freshUVar_
-  addConstraints [(absTyp, TArrow argTyp resultTyp)]
-  return resultTyp
 inferType (ETyped e typ_) = do
   let typ = toTypeClosed typ_
   eTyp <- inferType e
