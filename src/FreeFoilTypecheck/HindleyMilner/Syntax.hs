@@ -1,11 +1,11 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module FreeFoilTypecheck.HindleyMilner.Syntax where
@@ -43,8 +43,6 @@ deriveBitraversable ''ExpSig
 
 mkPatternSynonyms ''ExpSig
 
-{-# COMPLETE Var, ETrue, EFalse, ENat, EAdd, ESub, EIf, EIsZero, ETyped, ELet, EAbs, EApp, EFor #-}
-
 -- ** Conversion helpers
 
 mkConvertToFreeFoil ''Raw.Exp ''Raw.Ident ''Raw.ScopedExp ''Raw.Pattern
@@ -56,6 +54,9 @@ mkFoilPattern ''Raw.Ident ''Raw.Pattern
 deriveCoSinkable ''Raw.Ident ''Raw.Pattern
 mkToFoilPattern ''Raw.Ident ''Raw.Pattern
 mkFromFoilPattern ''Raw.Ident ''Raw.Pattern
+
+instance Foil.UnifiablePattern FoilPattern where
+  unifyPatterns (FoilPatternVar x) (FoilPatternVar y) = Foil.unifyNameBinders x y
 
 -- * Generated code (types)
 
@@ -70,8 +71,6 @@ deriveBitraversable ''TypeSig
 -- ** Pattern synonyms
 
 mkPatternSynonyms ''TypeSig
-
-{-# COMPLETE Var, TUVar, TNat, TBool, TArrow, TForAll #-}
 
 -- ** Conversion helpers
 
@@ -91,6 +90,8 @@ instance Foil.UnifiablePattern FoilTypePattern where
 -- * User-defined code
 
 type Exp n = AST FoilPattern ExpSig n
+
+type Exp' = Exp Foil.VoidS
 
 type Type n = AST FoilTypePattern TypeSig n
 
@@ -169,9 +170,8 @@ fromType =
 
 -- | Parse scope-safe terms via raw representation.
 --
--- TODO: fix this example
--- -- >>> fromString "let x = 2 + 2 in let y = x - 1 in let x = 3 in y + x + y" :: Type Foil.VoidS
--- -- let x0 = 2 + 2 in let x1 = x0 - 1 in let x2 = 3 in x1 + x2 + x1
+-- >>> fromString "forall x. x -> ?u1 -> Bool -> Nat" :: Type Foil.VoidS
+-- forall x0 . x0 -> ?u1 -> Bool -> Nat
 instance IsString (Type Foil.VoidS) where
   fromString input = case Raw.pType (Raw.myLexer input) of
     Left err -> error ("could not parse expression: " <> input <> "\n  " <> err)

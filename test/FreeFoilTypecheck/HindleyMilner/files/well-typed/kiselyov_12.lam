@@ -1,0 +1,2 @@
+let x = (λx.λy. (x y)) in
+  let y = (let z = (x (λx.x)) in z) in y

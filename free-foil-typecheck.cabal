@@ -31,13 +31,13 @@ custom-setup
 library
   exposed-modules:
       FreeFoilTypecheck.HindleyMilner.Eval
+      FreeFoilTypecheck.HindleyMilner.Inference
       FreeFoilTypecheck.HindleyMilner.Interpret
       FreeFoilTypecheck.HindleyMilner.Parser.Abs
       FreeFoilTypecheck.HindleyMilner.Parser.Lex
       FreeFoilTypecheck.HindleyMilner.Parser.Par
       FreeFoilTypecheck.HindleyMilner.Parser.Print
       FreeFoilTypecheck.HindleyMilner.Syntax
-      FreeFoilTypecheck.HindleyMilner.Typecheck
       FreeFoilTypecheck.SystemF.Eval
       FreeFoilTypecheck.SystemF.Interpret
       FreeFoilTypecheck.SystemF.Parser.Abs
@@ -64,6 +64,8 @@ library
     , bifunctors
     , containers
     , free-foil >=0.2.0
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 executable interpreter-hm
@@ -83,6 +85,8 @@ executable interpreter-hm
     , containers
     , free-foil >=0.2.0
     , free-foil-typecheck
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 executable interpreter-sf
@@ -102,6 +106,8 @@ executable interpreter-sf
     , containers
     , free-foil >=0.2.0
     , free-foil-typecheck
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 executable repl-hm
@@ -121,6 +127,8 @@ executable repl-hm
     , containers
     , free-foil >=0.2.0
     , free-foil-typecheck
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 executable repl-sf
@@ -140,6 +148,8 @@ executable repl-sf
     , containers
     , free-foil >=0.2.0
     , free-foil-typecheck
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 test-suite doctests
@@ -162,13 +172,15 @@ test-suite doctests
     , doctest-parallel
     , free-foil >=0.2.0
     , free-foil-typecheck
+    , hashable >=1.4.0
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
 
 test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      FreeFoilTypecheck.HindleyMilner.TypecheckSpec
+      FreeFoilTypecheck.HindleyMilner.InferenceSpec
       FreeFoilTypecheck.SystemF.InterpretSpec
       Paths_free_foil_typecheck
   hs-source-dirs:
@@ -188,6 +200,8 @@ test-suite spec
     , filepath
     , free-foil >=0.2.0
     , free-foil-typecheck
+    , hashable >=1.4.0
     , hspec
     , hspec-discover
+    , unordered-containers >=0.2.20
   default-language: Haskell2010
