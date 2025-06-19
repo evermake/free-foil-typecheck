@@ -43,8 +43,6 @@ deriveBitraversable ''ExpSig
 
 mkPatternSynonyms ''ExpSig
 
-{-# COMPLETE Var, ETrue, EFalse, ENat, EAdd, ESub, EIf, EIsZero, ETyped, ELet, EAbs, EApp, EFor #-}
-
 -- ** Conversion helpers
 
 mkConvertToFreeFoil ''Raw.Exp ''Raw.Ident ''Raw.ScopedExp ''Raw.Pattern
@@ -73,8 +71,6 @@ deriveBitraversable ''TypeSig
 -- ** Pattern synonyms
 
 mkPatternSynonyms ''TypeSig
-
-{-# COMPLETE Var, TUVar, TNat, TBool, TArrow, TForAll #-}
 
 -- ** Conversion helpers
 
