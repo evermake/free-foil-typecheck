@@ -379,28 +379,28 @@ inferType (FreeFoil.Var x) = do
   TypingEnv env <- gets tcEnv
   specialize_ (Foil.lookupName x env)
 inferType (EAbs (FoilPatternVar x) eBody) = do
-  paramType <- freshUVar_
-  bodyTyp <-
-    enterScope x paramType $
+  tParam <- freshUVar_
+  tBody <-
+    enterScope x tParam $
       inferType eBody
-  return (TArrow paramType bodyTyp)
+  return (TArrow tParam tBody)
 inferType (EApp eAbs eArg) = do
-  absTyp <- inferType eAbs
-  argTyp <- inferType eArg
-  resultTyp <- freshUVar_
-  addConstraints [(absTyp, TArrow argTyp resultTyp)]
-  return resultTyp
-inferType (ELet exprBinded (FoilPatternVar x) expr) = do
-  bindedType <-
+  tAbs <- inferType eAbs
+  tArg <- inferType eArg
+  tRes <- freshUVar_
+  addConstraints [(tAbs, TArrow tArg tRes)]
+  return tRes
+inferType (ELet eBound (FoilPatternVar x) eInner) = do
+  tBound <-
     enterLevel $
-      inferType exprBinded
+      inferType eBound
   unify
   subst <- gets tcSubst
-  bindedTypeGeneral <-
+  tBound' <-
     generalize $
-      applySubst subst bindedType
-  enterScope x bindedTypeGeneral $
-    inferType expr
+      applySubst subst tBound
+  enterScope x tBound' $
+    inferType eInner
 inferType (EAdd lhs rhs) = do
   lhsTyp <- inferType lhs
   rhsTyp <- inferType rhs
@@ -412,24 +412,24 @@ inferType (ESub lhs rhs) = do
   addConstraints [(lhsTyp, TNat), (rhsTyp, TNat)]
   return TNat
 inferType (EIf eCond eThen eElse) = do
-  condTyp <- inferType eCond
-  thenTyp <- inferType eThen
-  elseTyp <- inferType eElse
-  addConstraints [(condTyp, TBool), (thenTyp, elseTyp)]
-  return thenTyp
+  tCond <- inferType eCond
+  tThen <- inferType eThen
+  tElse <- inferType eElse
+  addConstraints [(tCond, TBool), (tThen, tElse)]
+  return tThen
 inferType (EIsZero e) = do
-  eTyp <- inferType e
-  addConstraints [(eTyp, TNat)]
+  t <- inferType e
+  addConstraints [(t, TNat)]
   return TBool
-inferType (ETyped e typ_) = do
-  let typ = toTypeClosed typ_
-  eTyp <- inferType e
-  addConstraints [(eTyp, typ)]
-  return typ
+inferType (ETyped e t) = do
+  let tExpected = toTypeClosed t
+  tActual <- inferType e
+  addConstraints [(tActual, tExpected)]
+  return tExpected
 inferType (EFor eFrom eTo (FoilPatternVar x) eBody) = do
-  fromTyp <- inferType eFrom
-  toTyp <- inferType eTo
-  addConstraints [(fromTyp, TNat), (toTyp, TNat)]
+  tFrom <- inferType eFrom
+  tTo <- inferType eTo
+  addConstraints [(tFrom, TNat), (tTo, TNat)]
   enterScope x TNat $
     inferType eBody
 
