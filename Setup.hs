@@ -43,15 +43,6 @@ main =
                 , "happy Par.y"
                 , "true"
                 , "cd ../../../.."
-                ] <>
-                [ "cp grammar/system-f.cf grammar/Parser.cf"  -- Workaround to customize generated package name
-                , "bnfc --haskell -d -p FreeFoilTypecheck.SystemF --generic -o src grammar/Parser.cf"
-                , "rm grammar/Parser.cf"
-                , "cd src/FreeFoilTypecheck/SystemF/Parser"
-                , "alex Lex.x"
-                , "happy Par.y"
-                , "true"
-                , "cd ../../../.."
                 ]
 
             fullCommand = [fmt|bash -c ' {command} '|]

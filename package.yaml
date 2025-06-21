@@ -6,9 +6,8 @@ synopsis: Type systems implementation powered by Free Foil.
 category: Language
 
 extra-source-files:
-  - README.md
+  - README
   - grammar/hindley-milner.cf
-  - grammar/system-f.cf
 
 custom-setup:
   dependencies:
@@ -44,12 +43,6 @@ library:
         - FreeFoilTypecheck.HindleyMilner.Parser.ErrM
         - FreeFoilTypecheck.HindleyMilner.Parser.Skel
 
-    - condition: false
-      other-modules:
-        - FreeFoilTypecheck.SystemF.Parser.Test
-        - FreeFoilTypecheck.SystemF.Parser.ErrM
-        - FreeFoilTypecheck.SystemF.Parser.Skel
-
 executables:
   repl-hm:
     main: Repl.hs
@@ -70,20 +63,6 @@ executables:
       - -threaded
       - -rtsopts
       - -with-rtsopts=-N
-    dependencies:
-      - free-foil-typecheck
-
-  repl-sf:
-    main: Repl.hs
-    source-dirs: app/SystemF
-    other-modules: []
-    dependencies:
-      - free-foil-typecheck
-
-  interpreter-sf:
-    main: Interpreter.hs
-    source-dirs: app/SystemF
-    other-modules: []
     dependencies:
       - free-foil-typecheck
 

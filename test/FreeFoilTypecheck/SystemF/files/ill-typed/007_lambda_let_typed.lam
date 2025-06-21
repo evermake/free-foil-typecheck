@@ -1,1 +1,0 @@
-λx:Nat. let y = x + 1 in y : Nat -> Bool
