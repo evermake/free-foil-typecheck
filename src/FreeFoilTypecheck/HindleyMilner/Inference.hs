@@ -83,7 +83,7 @@ instance Typed (FreeFoil.AST FoilTypePattern TypeSig) where
 
   freeVars (TUVar ident) = Set.singleton ident
   freeVars (FreeFoil.Var _) = Set.empty
-  freeVars (FreeFoil.Node node) = Set.unions $ freeVars <$> node
+  freeVars (FreeFoil.Node node) = Set.unions $ fmap freeVars node
 
 instance Typed Constraint where
   applySubst s (Constraint (t1, t2)) = Constraint (applySubst s t1, applySubst s t2)
@@ -102,7 +102,8 @@ singleSubst :: (Foil.Distinct n) => Raw.UVarIdent -> Type n -> Subst n
 singleSubst ident type_ = Subst (Map.singleton ident type_)
 
 composeSubst :: (Foil.Distinct n) => Subst n -> Subst n -> Subst n
-composeSubst (Subst s1) (Subst s2) = Subst (Map.map (applySubst (Subst s2)) s1 `Map.union` s2)
+composeSubst (Subst m1) s2@(Subst m2) =
+  Subst (Map.map (applySubst s2) m1 `Map.union` m2)
 
 applySubstToType :: (Foil.Distinct n) => (Raw.UVarIdent, Type n) -> Type n -> Type n
 applySubstToType (ident, type_) (TUVar x)
@@ -143,7 +144,7 @@ initialTypingContext =
 --------------------------------------------------------------------------------
 
 newtype TypeInferencer n a = TypeInferencer
-  {runTypeInferencer :: TypingContext n -> Either String (a, TypingContext n)}
+  {runTI :: TypingContext n -> Either String (a, TypingContext n)}
   deriving (Functor)
 
 instance Applicative (TypeInferencer n) where
@@ -153,11 +154,11 @@ instance Applicative (TypeInferencer n) where
 instance Monad (TypeInferencer n) where
   TypeInferencer g >>= f = TypeInferencer $ \ctx -> do
     (x, ctx') <- g ctx
-    runTypeInferencer (f x) ctx'
+    runTI (f x) ctx'
 
 evalTypeInferencer :: TypeInferencer Foil.VoidS a -> Either String a
 evalTypeInferencer ti = do
-  (result, _ctx) <- runTypeInferencer ti initialTypingContext
+  (result, _ctx) <- runTI ti initialTypingContext
   return result
 
 get :: TypeInferencer n (TypingContext n)
@@ -178,7 +179,7 @@ enterScope binder type_ action = do
   ctx <- get
   let (TypingEnv nameMap) = tcEnv ctx
   let ctx' = ctx {tcEnv = TypingEnv (Foil.addNameBinder binder type_ nameMap)}
-  (x, ctx'') <- fromEither $ runTypeInferencer action ctx'
+  (x, ctx'') <- fromEither $ runTI action ctx'
   let (TypingEnv nameMap'') = tcEnv ctx''
   put ctx'' {tcEnv = TypingEnv (popNameBinder binder nameMap'')}
   return x
@@ -187,7 +188,7 @@ enterLevel :: TypeInferencer n a -> TypeInferencer n a
 enterLevel action = do
   ctx <- get
   let ctx' = ctx {tcLevel = tcLevel ctx + 1}
-  (x, ctx'') <- fromEither $ runTypeInferencer action ctx'
+  (x, ctx'') <- fromEither $ runTI action ctx'
   put ctx'' {tcLevel = tcLevel ctx'' - 1}
   return x
 
@@ -240,7 +241,12 @@ generalize type_ = do
 unify :: TypeInferencer n ()
 unify = do
   ctx <- get
-  (subst', levelsMap') <- fromEither $ unifyConstraintsWithSubst (tcLevelMap ctx) (tcConstraints ctx) (tcSubst ctx)
+  (subst', levelsMap') <-
+    fromEither $
+      unifyConstraintsWithSubst
+        (tcLevelMap ctx)
+        (tcConstraints ctx)
+        (tcSubst ctx)
   let env' = applySubst subst' (tcEnv ctx)
   put
     ctx
@@ -437,8 +443,10 @@ inferType (EFor eFrom eTo (FoilPatternVar x) eBody) = do
 
 inferTypeClosed :: Exp Foil.VoidS -> Either String Type'
 inferTypeClosed expr = do
-  (type_, ctx) <- runTypeInferencer (inferType expr) initialTypingContext
-  (subst, _levelsMap) <- unifyConstraintsWithSubst (tcLevelMap ctx) (tcConstraints ctx) (tcSubst ctx)
-  return $ applySubst subst type_
+  (t, ctx) <- runTI (inferType expr) initialTypingContext
+  (_, ctx') <- runTI unify ctx
+  let t' = applySubst (tcSubst ctx') t
+  (tGen, _) <- runTI (generalize t') (ctx' {tcLevel = 0})
+  return tGen
 
 --------------------------------------------------------------------------------
