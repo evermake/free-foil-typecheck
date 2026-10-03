@@ -379,8 +379,10 @@ unifyHM typ1 typ2 = do
       typ2' = applySubstsToType tcSubsts typ2
   case (typ1', typ2') of
     -- Case for unification variables
-    (toUVarIdent -> Just x, r) -> addSubsts [(x, r)]
-    (l, toUVarIdent -> Just x) -> addSubsts [(x, l)]
+    (toUVarIdent -> Just x, toUVarIdent -> Just y)
+      | x == y -> return ()
+    (toUVarIdent -> Just x, r) -> bindUVar x r
+    (l, toUVarIdent -> Just x) -> bindUVar x l
     -- Case for Free Foil variables (not supported for now)
     (FreeFoil.Var x, FreeFoil.Var y)
       | x == y -> addSubsts []
@@ -395,6 +397,10 @@ unifyHM typ1 typ2 = do
         Just lr -> do
           bitraverse_ (\_ -> failTypeCheck "Unable to unify scoped type") (uncurry unifyHM) lr -- ignores "scopes", only works with "terms"
     (_, _) -> failTypeCheck ("cannot unify ") -- ++ lhs ++ rhs)
+  where
+    bindUVar x typ
+      | x `elem` allUVarsOfType typ = failTypeCheck "occurs check failed"
+      | otherwise = addSubsts [(x, typ)]
 
 -- freshHM :: TypeCheck n ty (ty n)
 freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
