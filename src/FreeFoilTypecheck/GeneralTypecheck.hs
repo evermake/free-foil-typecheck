@@ -23,7 +23,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans -Wno-simplifiable-class-constraints #-}
 
-module FreeFoilTypecheck.HindleyMilner.GeneralTypecheck where
+module FreeFoilTypecheck.GeneralTypecheck where
 
 -- import Control.Applicative (Const)
 import Control.Monad (ap)

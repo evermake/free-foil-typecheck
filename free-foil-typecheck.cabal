@@ -30,8 +30,8 @@ custom-setup
 
 library
   exposed-modules:
+      FreeFoilTypecheck.GeneralTypecheck
       FreeFoilTypecheck.HindleyMilner.Eval
-      FreeFoilTypecheck.HindleyMilner.GeneralTypecheck
       FreeFoilTypecheck.HindleyMilner.Inference
       FreeFoilTypecheck.HindleyMilner.Interpret
       FreeFoilTypecheck.HindleyMilner.Parser.Abs

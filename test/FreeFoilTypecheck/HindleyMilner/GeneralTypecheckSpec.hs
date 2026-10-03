@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Runs the generic engine ('FreeFoilTypecheck.HindleyMilner.GeneralTypecheck')
+-- | Runs the generic engine ('FreeFoilTypecheck.GeneralTypecheck')
 -- on the same test programs as 'FreeFoilTypecheck.HindleyMilner.InferenceSpec'.
 module FreeFoilTypecheck.HindleyMilner.GeneralTypecheckSpec where
 
@@ -9,7 +9,7 @@ import qualified Control.Monad.Free.Foil as FreeFoil
 import Control.Monad (forM_)
 import Data.Either (isLeft)
 import Data.List (isSuffixOf, nub, sort)
-import FreeFoilTypecheck.HindleyMilner.GeneralTypecheck
+import FreeFoilTypecheck.GeneralTypecheck
   ( TypeCheck (..),
     TypingContext (..),
     UType,
