@@ -19,12 +19,11 @@ import FreeFoilTypecheck.GeneralTypecheck
     equivHMType,
     generalize,
     inferTypeNewClosed,
-    injectUType',
-    testInferTypeNewClosed,
   )
 import FreeFoilTypecheck.HindleyMilner.InferenceSpec (testFilesInDir)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
+import FreeFoilTypecheck.HindleyMilner.Rules (injectUType', testInferTypeNewClosed)
 import FreeFoilTypecheck.HindleyMilner.Syntax
 import System.FilePath (replaceExtension)
 import Test.Hspec

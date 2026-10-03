@@ -40,7 +40,6 @@ import Data.Bitraversable (Bitraversable (..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Kind as K
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
-import FreeFoilTypecheck.HindleyMilner.Syntax
 import qualified GHC.Generics as GHC
 import Generics.Kind.TH (deriveGenericK)
 
@@ -87,18 +86,6 @@ deriveBitraversable ''MetaVarSig
 type UType binder typeSig = FreeFoil.AST binder (Sum typeSig MetaVarSig)
 
 type UScopedType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
-
-instance Show (UType FoilTypePattern TypeSig n) where
-  show = show . fromUType
-    where
-      fromUType :: UType FoilTypePattern TypeSig n -> Type n
-      fromUType = \case
-        FreeFoil.Var x -> FreeFoil.Var x
-        FreeFoil.Node (L2 node) -> FreeFoil.Node (bimap fromUTypeScoped fromUType node)
-        FreeFoil.Node (R2 (MetaVarSig metavar)) -> FreeFoil.Node (TUVarSig metavar)
-
-      fromUTypeScoped :: UScopedType FoilTypePattern TypeSig n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n
-      fromUTypeScoped (FreeFoil.ScopedAST binder body) = FreeFoil.ScopedAST binder (fromUType body)
 
 fromUVarIdent :: Raw.UVarIdent -> UType binder typeSig n
 fromUVarIdent x = FreeFoil.Node (R2 (MetaVarSig x))
@@ -160,13 +147,6 @@ inferTypeNewClosed expr = do
   substs' <- unify (map (applySubstsToConstraint substs) constrs)
   return (applySubstsToType substs' type')
 
--- >>> testInferTypeNewClosed "1 + 2"
--- Right Nat
--- >>> testInferTypeNewClosed "1 + true"
--- Left "cannot unify "
-testInferTypeNewClosed :: Exp Foil.VoidS -> Either String (UType FoilTypePattern TypeSig Foil.VoidS)
-testInferTypeNewClosed e = fst <$> runTypeCheck (inferTypeNewClosed e) emptyTypingContext
-
 emptyTypingContext :: TypingContext ty Foil.VoidS
 emptyTypingContext = TypingContext [] [] Foil.emptyNameMap 0
 
@@ -187,8 +167,8 @@ class AlphaEquiv t where
   alphaEquiv :: (Foil.Distinct n) => Foil.Scope n -> t n -> t n -> Bool
 
 instance
-  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig) =>
-  AlphaEquiv (FreeFoil.AST FoilTypePattern sig)
+  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig, Foil.UnifiablePattern binder) =>
+  AlphaEquiv (FreeFoil.AST binder sig)
   where
   alphaEquiv = FreeFoil.alphaEquiv
 
@@ -235,11 +215,6 @@ equivTypeScheme alphaEquivFunc (TypeScheme binders1 ty1) (TypeScheme binders2 ty
 injectUType :: (Bifunctor typeSig) => FreeFoil.AST binder typeSig n -> UType binder typeSig n
 injectUType = transAST L2
 
-injectUType' :: FreeFoil.AST binder TypeSig n -> UType binder TypeSig n
-injectUType' = transAST $ \case
-  TUVarSig m -> R2 (MetaVarSig m)
-  node -> L2 node
-
 -- L2 :: typeSig scope term -> (Sum typeSig MetaVarSig) scope term
 
 transAST ::
@@ -257,49 +232,6 @@ transScopedAST ::
   FreeFoil.ScopedAST binder sig2 n
 transScopedAST phi (FreeFoil.ScopedAST binder body) =
   FreeFoil.ScopedAST binder (transAST phi body)
-
-instance HMTypingSig FoilTypePattern TypeSig ExpSig where
-  inferSigHM = \case
-    ETrueSig -> return (injectUType TBool)
-    EFalseSig -> return (injectUType TBool)
-    ESubSig l r -> do
-      _ <- unifyHM l (injectUType TNat)
-      _ <- unifyHM r (injectUType TNat)
-      return (injectUType TNat)
-    EAddSig l r -> do
-      _ <- unifyHM l (injectUType TNat)
-      _ <- unifyHM r (injectUType TNat)
-      return (injectUType TNat)
-    EIfSig condType thenType elseType -> do
-      _ <- unifyHM condType (injectUType TBool)
-      _ <- unifyHM thenType elseType
-      return thenType
-    EIsZeroSig argType -> do
-      _ <- unifyHM argType (injectUType TNat)
-      return (injectUType TBool)
-    EAppSig funType argType -> do
-      retType <- freshHM
-      _ <- unifyHM funType (FreeFoil.Node (L2 (TArrowSig argType retType)))
-      return retType
-    ETypedSig ty annotation -> do
-      let annotationType = injectUType' (toTypeClosed annotation)
-      _ <- unifyHM ty annotationType
-      return annotationType
-    ENatSig _ -> do
-      return (injectUType TNat)
-    EForSig fromTy toTy inferBody -> do
-      (binderType, bodyType) <- inferBody Nothing
-      _ <- unifyHM fromTy (injectUType TNat)
-      _ <- unifyHM toTy (injectUType TNat)
-      _ <- unifyHM binderType (injectUType TNat)
-      return bodyType
-    EAbsSig inferBody -> do
-      (paramType, bodyType) <- inferBody Nothing
-      return (TArrow' paramType bodyType)
-    ELetSig type1 inferBody -> do
-      gtype1 <- generalizeHM type1
-      (_, bodyType) <- inferBody (Just gtype1)
-      return bodyType
 
 applySubstsFromContextToType ::
   (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder, Foil.DExt Foil.VoidS n) =>
@@ -465,9 +397,6 @@ class TypedPattern ty binder where
 
 instance TypedPattern (UType binder typeSig) Foil.NameBinder where
   enterScopePattern = enterScope
-
-instance TypedPattern (UType binder typeSig) FoilPattern where
-  enterScopePattern (FoilPatternVar binder) = enterScopePattern binder
 
 enterScope :: Foil.NameBinder n l -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) l a -> TypeCheck (UType binder typeSig) n a
 enterScope x type_ action =

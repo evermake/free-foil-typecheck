@@ -38,6 +38,7 @@ library
       FreeFoilTypecheck.HindleyMilner.Parser.Lex
       FreeFoilTypecheck.HindleyMilner.Parser.Par
       FreeFoilTypecheck.HindleyMilner.Parser.Print
+      FreeFoilTypecheck.HindleyMilner.Rules
       FreeFoilTypecheck.HindleyMilner.Syntax
       FreeFoilTypecheck.ScopeCheck
       FreeFoilTypecheck.SystemF.Eval
