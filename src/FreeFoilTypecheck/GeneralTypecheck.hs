@@ -385,7 +385,24 @@ data ScopedInfer typeBinder typeSig n = ScopedInfer
 -- A rule receives the children of a node as computations, not as their types.
 -- This way a rule decides when (and in which context) each child is inferred.
 -- For example, the rule for @let@ infers the bound term inside 'generalizeHM',
--- and the rule for @λ@ chooses the type of the bound variable.
+-- and the rule for @λ@ chooses the type of the bound variable (in the HM
+-- language, a pattern is a variable):
+--
+-- > EAbsSig body -> do
+-- >   paramType <- freshHM
+-- >   bodyType <- inferScopedHM body paramType
+-- >   return (TArrow' paramType bodyType)
+-- > ELetSig bound body -> do
+-- >   boundType <- generalizeHM bound
+-- >   inferBodyHM body [boundType]
+--
+-- With level-based generalisation, the bound term of a @let@ must be inferred
+-- one level deeper. An engine that infers all children before calling the rule
+-- would infer it at the outer level. Another way to fix this is to keep the
+-- children inferred, but let the signature mark the positions to generalise,
+-- so that the traversal enters a level for them. We chose suspended children:
+-- they need no extra annotation, and they also let a rule choose the order of
+-- inference and the types of the bound variables.
 class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (sig :: K.Type -> K.Type -> K.Type) where
   inferSigHM ::
     sig (ScopedInfer binder typeSig n) (Infer binder typeSig n) ->
