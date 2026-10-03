@@ -313,8 +313,10 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       retType <- freshHM
       _ <- unifyHM funType (FreeFoil.Node (L2 (TArrowSig argType retType)))
       return retType
-    ETypedSig ty _ -> do
-      return ty
+    ETypedSig ty annotation -> do
+      let annotationType = injectUType' (toTypeClosed annotation)
+      _ <- unifyHM ty annotationType
+      return annotationType
     ENatSig _ -> do
       return (injectUType TNat)
     EForSig fromTy toTy inferBody -> do
