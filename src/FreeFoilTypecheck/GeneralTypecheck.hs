@@ -263,18 +263,25 @@ enterScope binder types (TypeCheck action)
 
 -- * Interface for typing rules
 
-type Infer typeBinder typeSig = UType typeBinder typeSig Foil.VoidS
+-- | A computation that infers the type of a child term.
+type Infer typeBinder typeSig n =
+  TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 
+-- | A computation that infers the type of a scoped child term (the body of a binder),
+-- given the types of the variables bound by its pattern, in the order of the pattern.
 type ScopedInfer typeBinder typeSig n =
-  Maybe (HMType (UType typeBinder typeSig)) ->
-  TypeCheck (UType typeBinder typeSig) n (Infer typeBinder typeSig, Infer typeBinder typeSig)
+  [HMType (UType typeBinder typeSig)] -> Infer typeBinder typeSig n
 
+-- | Typing rules of a language, one per node of its term signature @sig@.
+--
+-- A rule receives the children of a node as computations, not as their types.
+-- This way a rule decides when (and in which context) each child is inferred.
+-- For example, the rule for @let@ infers the bound term inside 'generalizeHM',
+-- and the rule for @λ@ chooses the type of the bound variable.
 class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (sig :: K.Type -> K.Type -> K.Type) where
   inferSigHM ::
-    sig
-      (ScopedInfer binder typeSig n)
-      (Infer binder typeSig) -> -- expr node
-    TypeCheck (UType binder typeSig) n (Infer binder typeSig) -- typecheck result
+    sig (ScopedInfer binder typeSig n) (Infer binder typeSig n) ->
+    Infer binder typeSig n
 
 -- * Operations for typing rules
 
@@ -316,19 +323,30 @@ bindMetaVar (MetaVar x) type_ = do
     then failTypeCheck "occurs check failed"
     else put ctx {tcSubst = IntMap.insert x type_ (tcSubst ctx)}
 
--- | Generalise a type over the unification variables that do not occur
--- in the typing environment.
+-- | Infer the type of a child term and generalise it over the unification
+-- variables that do not occur in the typing environment.
 generalizeHM ::
   (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
-  UType binder typeSig Foil.VoidS ->
+  Infer binder typeSig n ->
   TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig))
-generalizeHM type_ = do
+generalizeHM infer = do
+  type_ <- infer
   ctx <- get
   let subst = tcSubst ctx
       type' = zonk subst type_
       envVars = IntSet.fromList (concatMap (freeMetaVarsHM subst) (F.toList (tcTypings ctx)))
       vars = [x | x@(MetaVar i) <- metaVarsOf type', not (IntSet.member i envVars)]
   return (generalize vars type')
+
+-- | Infer the type of a child term and unify it with the expected type.
+checkHM ::
+  (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) =>
+  Infer binder typeSig n ->
+  UType binder typeSig Foil.VoidS ->
+  TypeCheck (UType binder typeSig) n ()
+checkHM infer expected = do
+  type_ <- infer
+  unifyHM type_ expected
 
 -- | Instantiate a type scheme with fresh unification variables.
 instantiateHM :: (Bifunctor typeSig, Foil.CoSinkable binder) => HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
@@ -346,37 +364,30 @@ zonkHM type_ = do
 -- * Generic traversal
 
 inferTypeNewClosed ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig) =>
   FreeFoil.AST binder sig Foil.VoidS ->
   TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = reconstructType expr >>= zonkHM
 
+-- | Infer the type of a term: instantiate the type of a variable,
+-- or apply the typing rule of a node to its (suspended) children.
 reconstructType ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.AST binder sig n ->
-  TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
+  Infer typeBinder typeSig n
 reconstructType = \case
   FreeFoil.Var x -> do
     ctx <- get
     instantiateHM (Foil.lookupName x (tcTypings ctx))
-  FreeFoil.Node node -> do
-    node' <- bitraverse reconstructTypeScoped' reconstructType node
-    inferSigHM node'
+  FreeFoil.Node node ->
+    inferSigHM (bimap reconstructTypeScoped reconstructType node)
 
-reconstructTypeScoped' ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
+reconstructTypeScoped ::
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.ScopedAST binder sig n ->
-  TypeCheck (UType typeBinder typeSig) n (ScopedInfer typeBinder typeSig n)
-reconstructTypeScoped' (FreeFoil.ScopedAST binder body) =
-  return $ \case
-    Nothing -> do
-      type_ <- freshHM
-      bodyType <- enterScope binder [MonoType type_] (reconstructType body)
-      return (type_, bodyType)
-    Just gtype -> do
-      bodyType <- enterScope binder [gtype] (reconstructType body)
-      type_ <- instantiateHM gtype
-      return (type_, bodyType)
+  ScopedInfer typeBinder typeSig n
+reconstructTypeScoped (FreeFoil.ScopedAST binder body) types =
+  enterScope binder types (reconstructType body)
 
 -- * Comparing types
 
