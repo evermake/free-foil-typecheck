@@ -204,6 +204,7 @@ test-suite spec
       FreeFoilTypecheck.HindleyMilner.DifferentialSpec
       FreeFoilTypecheck.HindleyMilner.GeneralTypecheckSpec
       FreeFoilTypecheck.HindleyMilner.InferenceSpec
+      FreeFoilTypecheck.MiniML.DifferentialSpec
       FreeFoilTypecheck.MiniML.RulesSpec
       FreeFoilTypecheck.SystemF.InterpretSpec
       Paths_free_foil_typecheck
