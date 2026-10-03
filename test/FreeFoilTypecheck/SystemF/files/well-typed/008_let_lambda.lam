@@ -1,0 +1,1 @@
+let f = λx:Nat. x + 1 in f 5

@@ -1,0 +1,2 @@
+for i in [1..5] do
+    let x = 10 - i in x + (let y = 1 in x + y)

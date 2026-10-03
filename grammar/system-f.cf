@@ -1,0 +1,39 @@
+token UVarIdent ('?' letter (letter | digit | '_')*) ; ;
+
+PatternVar. Pattern ::= Ident ;
+
+EVar.        Term3 ::= Ident ;
+ETrue.       Term3 ::= "true" ;
+EFalse.      Term3 ::= "false" ;
+ENat.        Term3 ::= Integer ;
+EAdd.        Term2 ::= Term2 "+" Term3 ;
+ESub.        Term2 ::= Term2 "-" Term3 ;
+EIf.         Term1 ::= "if" Term1 "then" Term1 "else" Term1 ;
+EIsZero.     Term2 ::= "iszero" "(" Term ")" ;
+ETyped.      Term  ::= Term1 ":" Term ;
+ELet.        Term1 ::= "let" Pattern "=" Term1 "in" ScopedTerm ;
+EAbsTyped.   Term1 ::= "λ" Pattern ":" Term "." ScopedTerm ;
+EAbsUntyped. Term1 ::= "λ" Pattern "." ScopedTerm ;
+EApp.        Term1 ::= Term1 Term2 ;
+ETAbs.       Term1 ::= "Λ" Pattern "." ScopedTerm ;
+ETApp.       Term1 ::= Term1 "[" Term "]" ;
+EFor.        Term1 ::= "for" Pattern "in" "[" Term1 ".." Term1 "]" "do" ScopedTerm ;
+
+-- ScopedExp. ScopedExp ::= Exp ;
+
+TUVar.   Term3 ::= UVarIdent ;
+TNat.    Term3 ::= "Nat" ;
+TBool.   Term3 ::= "Bool" ;
+TType.   Term3 ::= "Type" ;
+TArrow.  Term2 ::= Term3 "->" Term2 ;
+TForAll. Term1 ::= "forall" Pattern "." ScopedTerm ;
+
+-- https://bnfc.readthedocs.io/en/latest/lbnf.html#coercions
+coercions Term 3 ;
+
+-- ScopedTerm. ScopedTerm ::= Term ;
+
+-- TPatternVar. TermPattern ::= Ident ;
+ScopedTerm. ScopedTerm ::= Term1 ;
+
+-- rules   EAbs. ::= EAbsTyped | EAbsUntyped ;
