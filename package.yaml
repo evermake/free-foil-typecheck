@@ -117,3 +117,14 @@ tests:
       - directory
       - filepath
       - QuickCheck
+
+benchmarks:
+  nested-let:
+    main: Main.hs
+    source-dirs: bench
+    ghc-options:
+      - -O2
+      - -fno-full-laziness
+      - -rtsopts
+    dependencies:
+      - free-foil-typecheck
