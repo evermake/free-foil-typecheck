@@ -6,7 +6,7 @@ synopsis: Type systems implementation powered by Free Foil.
 category: Language
 
 extra-source-files:
-  - README
+  - README.md
   - grammar/hindley-milner.cf
   - grammar/system-f.cf
 

@@ -13,7 +13,7 @@ homepage:       https://github.com/evermake/free-foil-typecheck#readme
 bug-reports:    https://github.com/evermake/free-foil-typecheck/issues
 build-type:     Custom
 extra-source-files:
-    README
+    README.md
     grammar/hindley-milner.cf
     grammar/system-f.cf
 
