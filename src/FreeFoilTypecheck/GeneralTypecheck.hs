@@ -211,17 +211,45 @@ freeMetaVarsHM subst (PolyType (TypeScheme _ type_)) = freeMetaVars subst type_
 
 -- * Inference monad
 
+-- | How 'generalizeHM' finds the unification variables to quantify.
+data Generalization
+  = -- | Quantify the variables whose level is deeper than the current one
+    -- (Rémy). This does not look at the typing environment.
+    LevelBased
+  | -- | Quantify the variables that do not occur in the typing environment
+    -- (Damas and Milner). This traverses the whole environment at every @let@.
+    Naive
+  deriving (Eq, Show)
+
 data TypingContext ty n = TypingContext
   { -- | Triangular substitution of unification variables.
     tcSubst :: IntMap.IntMap (ty Foil.VoidS),
     -- | Types of the variables in scope.
     tcTypings :: Foil.NameMap n (HMType ty),
     -- | Next unification variable.
-    tcFreshId :: Int
+    tcFreshId :: Int,
+    -- | Level of each unification variable that is not bound by the substitution.
+    -- Invariant: a variable occurs in the typing environment (after applying
+    -- the substitution) only if its level is at most the current level.
+    tcLevels :: IntMap.IntMap Int,
+    -- | Current level: the number of enclosing 'generalizeHM's.
+    tcLevel :: Int,
+    tcGeneralization :: Generalization
   }
 
+initialTypingContext :: Generalization -> TypingContext ty Foil.VoidS
+initialTypingContext generalization =
+  TypingContext
+    { tcSubst = IntMap.empty,
+      tcTypings = Foil.emptyNameMap,
+      tcFreshId = 0,
+      tcLevels = IntMap.empty,
+      tcLevel = 0,
+      tcGeneralization = generalization
+    }
+
 emptyTypingContext :: TypingContext ty Foil.VoidS
-emptyTypingContext = TypingContext IntMap.empty Foil.emptyNameMap 0
+emptyTypingContext = initialTypingContext LevelBased
 
 newtype TypeCheck ty n a = TypeCheck {runTypeCheck :: TypingContext ty n -> Either String (a, TypingContext ty n)}
   deriving (Functor)
@@ -285,12 +313,17 @@ class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K
 
 -- * Operations for typing rules
 
--- | A fresh unification variable.
+-- | A fresh unification variable (at the current level).
 freshMetaVar :: TypeCheck ty n MetaVar
 freshMetaVar = do
   ctx <- get
-  put ctx {tcFreshId = tcFreshId ctx + 1}
-  return (MetaVar (tcFreshId ctx))
+  let x = tcFreshId ctx
+  put
+    ctx
+      { tcFreshId = x + 1,
+        tcLevels = IntMap.insert x (tcLevel ctx) (tcLevels ctx)
+      }
+  return (MetaVar x)
 
 -- | A fresh unification variable as a type.
 freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
@@ -316,27 +349,49 @@ unifyHM typ1 typ2 = do
     walk _ type_ = type_
 
 -- | Bind a unification variable (after the occurs check).
+-- With 'LevelBased' generalisation, the variables of the type
+-- get the level of the bound variable, if theirs is deeper.
 bindMetaVar :: (Bifoldable typeSig) => MetaVar -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
 bindMetaVar (MetaVar x) type_ = do
   ctx <- get
-  if x `elem` freeMetaVars (tcSubst ctx) type_
+  let vars = freeMetaVars (tcSubst ctx) type_
+      levels = case (tcGeneralization ctx, IntMap.lookup x (tcLevels ctx)) of
+        (LevelBased, Just level) -> foldr (IntMap.adjust (min level)) (tcLevels ctx) vars
+        _ -> tcLevels ctx
+  if x `elem` vars
     then failTypeCheck "occurs check failed"
-    else put ctx {tcSubst = IntMap.insert x type_ (tcSubst ctx)}
+    else put ctx {tcSubst = IntMap.insert x type_ (tcSubst ctx), tcLevels = levels}
 
--- | Infer the type of a child term and generalise it over the unification
--- variables that do not occur in the typing environment.
+-- | Infer the type of a child term one level deeper, and generalise it over
+-- the unification variables that cannot occur in the typing environment
+-- (see 'Generalization').
 generalizeHM ::
   (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
   Infer binder typeSig n ->
   TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig))
 generalizeHM infer = do
-  type_ <- infer
+  type_ <- enterLevel infer
   ctx <- get
   let subst = tcSubst ctx
       type' = zonk subst type_
-      envVars = IntSet.fromList (concatMap (freeMetaVarsHM subst) (F.toList (tcTypings ctx)))
-      vars = [x | x@(MetaVar i) <- metaVarsOf type', not (IntSet.member i envVars)]
+      candidates = metaVarsOf type'
+      vars = case tcGeneralization ctx of
+        LevelBased ->
+          [x | x@(MetaVar i) <- candidates, IntMap.findWithDefault 0 i (tcLevels ctx) > tcLevel ctx]
+        Naive ->
+          let envVars = IntSet.fromList (concatMap (freeMetaVarsHM subst) (F.toList (tcTypings ctx)))
+           in [x | x@(MetaVar i) <- candidates, not (IntSet.member i envVars)]
   return (generalize vars type')
+
+-- | Run a computation one level deeper.
+enterLevel :: TypeCheck ty n a -> TypeCheck ty n a
+enterLevel action = do
+  ctx <- get
+  put ctx {tcLevel = tcLevel ctx + 1}
+  x <- action
+  ctx' <- get
+  put ctx' {tcLevel = tcLevel ctx' - 1}
+  return x
 
 -- | Infer the type of a child term and unify it with the expected type.
 checkHM ::
@@ -368,6 +423,15 @@ inferTypeNewClosed ::
   FreeFoil.AST binder sig Foil.VoidS ->
   TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = reconstructType expr >>= zonkHM
+
+-- | Infer the principal type scheme of a closed term.
+inferTypeSchemeClosed ::
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig, Bifoldable typeSig) =>
+  Generalization ->
+  FreeFoil.AST binder sig Foil.VoidS ->
+  Either String (HMType (UType typeBinder typeSig))
+inferTypeSchemeClosed generalization expr =
+  fst <$> runTypeCheck (generalizeHM (reconstructType expr)) (initialTypingContext generalization)
 
 -- | Infer the type of a term: instantiate the type of a variable,
 -- or apply the typing rule of a node to its (suspended) children.

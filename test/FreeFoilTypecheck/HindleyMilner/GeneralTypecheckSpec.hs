@@ -11,36 +11,40 @@ import Data.Either (isLeft)
 import qualified Data.IntMap as IntMap
 import Data.List (isSuffixOf, sort)
 import FreeFoilTypecheck.GeneralTypecheck
-  ( HMType (..),
+  ( Generalization (..),
+    HMType (..),
     TypeCheck (..),
     TypingContext (..),
     UType,
+    canonicalHMType,
     emptyTypingContext,
     equivUpToRenaming,
     inferTypeNewClosed,
+    inferTypeSchemeClosed,
   )
 import FreeFoilTypecheck.HindleyMilner.InferenceSpec (testFilesInDir)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
-import FreeFoilTypecheck.HindleyMilner.Rules (fromTypeClosed, testInferTypeNewClosed)
+import FreeFoilTypecheck.HindleyMilner.Rules (fromTypeClosed, showHMType)
 import FreeFoilTypecheck.HindleyMilner.Syntax
 import System.FilePath (replaceExtension)
 import Test.Hspec
 
 spec :: Spec
 spec = parallel $ do
-  describe "well-typed expressions (generic engine)" $ do
-    paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files/well-typed")
-    forM_ (sort (filter (\p -> not (".expected.lam" `isSuffixOf` p)) paths)) $ \path -> it path $ do
-      contents <- readFile path
-      expectedTypeContents <- readFile (replaceExtension path ".expected.lam")
-      genericTypeMatches contents expectedTypeContents `shouldBe` Right True
+  forM_ [LevelBased, Naive] $ \generalization -> do
+    describe ("well-typed expressions (generic engine, " ++ show generalization ++ ")") $ do
+      paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files/well-typed")
+      forM_ (sort (filter (\p -> not (".expected.lam" `isSuffixOf` p)) paths)) $ \path -> it path $ do
+        contents <- readFile path
+        expectedTypeContents <- readFile (replaceExtension path ".expected.lam")
+        genericTypeMatches generalization contents expectedTypeContents `shouldBe` Right True
 
-  describe "ill-typed expressions (generic engine)" $ do
-    paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files/ill-typed")
-    forM_ (sort paths) $ \path -> it path $ do
-      contents <- readFile path
-      genericRejects contents `shouldBe` Right True
+    describe ("ill-typed expressions (generic engine, " ++ show generalization ++ ")") $ do
+      paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files/ill-typed")
+      forM_ (sort paths) $ \path -> it path $ do
+        contents <- readFile path
+        genericRejects generalization contents `shouldBe` Right True
 
   describe "substitution (generic engine)" $
     forM_ [1 .. 8 :: Int] $ \n ->
@@ -54,6 +58,9 @@ spec = parallel $ do
 inferHM :: Exp' -> TypeCheck (UType FoilTypePattern TypeSig) Foil.VoidS (UType FoilTypePattern TypeSig Foil.VoidS)
 inferHM = inferTypeNewClosed
 
+inferScheme :: Generalization -> Exp' -> Either String (HMType (UType FoilTypePattern TypeSig))
+inferScheme = inferTypeSchemeClosed
+
 -- | @λf0. let f1 = λx. f0 x in … let fn = λx. f(n-1) x in fn@
 nestedLets :: Int -> String
 nestedLets n =
@@ -64,20 +71,21 @@ nestedLets n =
 
 -- | Whether the generic engine rejects a program (with a scope or type error).
 -- A parsing error is reported as 'Left', since test programs must parse.
-genericRejects :: String -> Either String Bool
-genericRejects source = do
+genericRejects :: Generalization -> String -> Either String Bool
+genericRejects generalization source = do
   raw <- pExp (myLexer source)
   case toExpClosedChecked raw of
     Left _scopeError -> Right True
-    Right expr -> Right (isLeft (testInferTypeNewClosed expr))
+    Right expr -> Right (isLeft (inferScheme generalization expr))
 
 -- | Whether the generic engine infers the expected type (up to renaming).
-genericTypeMatches :: String -> String -> Either String Bool
-genericTypeMatches source expectedSource = do
+genericTypeMatches :: Generalization -> String -> String -> Either String Bool
+genericTypeMatches generalization source expectedSource = do
   expr <- pExp (myLexer source) >>= toExpClosedChecked
   expected <- fromTypeClosed . openForAlls . toTypeClosed <$> pType (myLexer expectedSource)
-  actual <- testInferTypeNewClosed expr
-  if equivUpToRenaming (MonoType actual) (MonoType expected)
+  actualScheme <- inferScheme generalization expr
+  let actual = canonicalHMType actualScheme
+  if equivUpToRenaming actual (MonoType expected)
     then Right True
     else
       Left $
@@ -86,7 +94,7 @@ genericTypeMatches source expectedSource = do
             "expected:",
             show expected,
             "but actual is:",
-            show actual
+            showHMType actual
           ]
 
 -- | Replace the leading @forall@s of an expected type with unification variables.

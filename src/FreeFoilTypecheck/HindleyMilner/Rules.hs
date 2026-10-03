@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -23,6 +24,8 @@ import FreeFoilTypecheck.ScopeCheck (checkClosed)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
+-- >>> import FreeFoilTypecheck.GeneralTypecheck
+-- >>> import FreeFoilTypecheck.HindleyMilner.Syntax (Exp')
 
 instance HMTypingSig FoilTypePattern TypeSig ExpSig where
   inferSigHM = \case
@@ -128,6 +131,19 @@ fromUType = \case
 
 instance Show (UType FoilTypePattern TypeSig n) where
   show = show . fromUType
+
+-- | Show a type scheme with @forall@s.
+--
+-- >>> either id showHMType (inferTypeSchemeClosed LevelBased ("let id = λx. x in id" :: Exp'))
+-- "forall x0 . x0 -> x0"
+showHMType :: HMType (UType FoilTypePattern TypeSig) -> String
+showHMType = \case
+  MonoType type_ -> show type_
+  PolyType (TypeScheme binders type_) -> show (foralls binders (fromUType type_))
+  where
+    foralls :: Foil.NameBinderList n l -> Type l -> Type n
+    foralls Foil.NameBinderListEmpty body = body
+    foralls (Foil.NameBinderListCons binder rest) body = TForAll (FoilTPatternVar binder) (foralls rest body)
 
 -- | Infer the type of a closed term with the generic engine.
 --
