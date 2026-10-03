@@ -1,6 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
--- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -25,15 +24,11 @@
 
 module FreeFoilTypecheck.GeneralTypecheck where
 
--- import Control.Applicative (Const)
 import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
--- import qualified Control.Monad.Foil as FreeFoil
 import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Foil.Relative as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
--- import qualified Data.Foldable as F
--- import qualified Data.IntMap as IntMap
 
 import Control.Monad.Free.Foil.Generic (genericZipMatch2)
 import qualified Control.Monad.Free.Foil.Generic as FreeFoil
@@ -44,22 +39,14 @@ import Data.Bifunctor.TH
 import Data.Bitraversable (Bitraversable (..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Kind as K
--- import Debug.Trace (traceShow)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Syntax
 import qualified GHC.Generics as GHC
 import Generics.Kind.TH (deriveGenericK)
 
--- import Unsafe.Coerce (unsafeCoerce)
-
 type Constraint' ty = (ty, ty)
 
 type USubst_ tyn = (Raw.UVarIdent, tyn)
-
--- type USubst' ty = (Raw.UVarIdent, ty Foil.VoidS)
-
--- -- type USubst' ty = USubst_ ty FreeFoil.VoidS
--- -- type USubst n = USubst_ Type n
 
 -- -- ∀ x₁ x₂ … xₙ. T
 -- -- Type scheme (a.k.a. polytype).
@@ -97,10 +84,6 @@ deriveBifunctor ''MetaVarSig
 deriveBifoldable ''MetaVarSig
 deriveBitraversable ''MetaVarSig
 
--- deriving (Functor, Bifoldable, Bitraversable)
-
--- -- deriving (..., ZipMatchK)
-
 type UType binder typeSig = FreeFoil.AST binder (Sum typeSig MetaVarSig)
 
 type UScopedType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
@@ -116,8 +99,6 @@ instance Show (UType FoilTypePattern TypeSig n) where
 
       fromUTypeScoped :: UScopedType FoilTypePattern TypeSig n -> FreeFoil.ScopedAST FoilTypePattern TypeSig n
       fromUTypeScoped (FreeFoil.ScopedAST binder body) = FreeFoil.ScopedAST binder (fromUType body)
-
--- type ScopedUType binder typeSig = FreeFoil.ScopedAST binder (Sum typeSig MetaVarSig)
 
 fromUVarIdent :: Raw.UVarIdent -> UType binder typeSig n
 fromUVarIdent x = FreeFoil.Node (R2 (MetaVarSig x))
@@ -169,17 +150,6 @@ instance Monad (TypeCheck (UType binder typeSig) n) where
     (x, tc') <- g tc
     runTypeCheck (f x) tc'
 
--- -- $setup
--- -- >>> :set -XOverloadedStrings
-
--- -- >>> inferTypeNewClosed "λx. x"
--- -- Right ?u0 -> ?u0
--- -- >>> inferTypeNewClosed "λx. x + 1"
--- -- Right Nat -> Nat
--- -- >>> inferTypeNewClosed "let f = (λx. λy. let g = x y in g) in f (λz. z) 0"
--- -- Right Nat
--- -- >>> inferTypeNewClosed "let twice = (λt. (λx. (t (t x)))) in let add2 = (λx. x + 2) in let bool2int = (λb. if b then 1 else 0) in let not = (λb. if b then false else true) in (twice add2) (bool2int ((twice not) true))"
--- -- Right Nat
 inferTypeNewClosed ::
   (Foil.CoSinkable typeBinder, Bitraversable sig, HMTypingSig typeBinder typeSig sig, Bitraversable typeSig, FreeFoil.ZipMatch typeSig, TypedPattern (UType typeBinder typeSig) binder) =>
   FreeFoil.AST binder sig Foil.VoidS ->
@@ -199,8 +169,6 @@ testInferTypeNewClosed e = fst <$> runTypeCheck (inferTypeNewClosed e) emptyTypi
 
 emptyTypingContext :: TypingContext ty Foil.VoidS
 emptyTypingContext = TypingContext [] [] Foil.emptyNameMap 0
-
--- type Constraint = (Type', Type')
 
 type Infer typeBinder typeSig = UType typeBinder typeSig Foil.VoidS
 
@@ -341,23 +309,6 @@ applySubstsFromContextToType type_ = do
   TypingContext _ substs _ _ <- get
   return (applySubstsToType (map (fmap Foil.sink) substs) type_)
 
---   generalizeHM eType xType
---   return bodyType
--- where
--- isExpectedToBe :: AlphaEquiv ty => Foil.Scope n -> ty n -> ty n -> Either (TypeError (ty n)) ()
---   actual `isExpectedToBe` expected =
---     unless (FreeFoil.alphaEquiv Foil.emptyScope actual expected) $
---       failTypeCheck "unexpected type" -- (TypeErrorUnexpectedType actual expected)
-
--- unifyHM :: UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (UType binder typeSig n)
--- unifyHM _ _ = undefined
-
--- freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
--- freshHM = undefined
-
--- generalizeHM :: (UType binder typeSig) n -> HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n ((UType binder typeSig) n)
--- generalizeHM _ _ = undefined
-
 generalizeHM ::
   (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
   UType binder typeSig Foil.VoidS ->
@@ -404,27 +355,11 @@ unifyHM typ1 typ2 = do
       | x `elem` allUVarsOfType typ = failTypeCheck "occurs check failed"
       | otherwise = addSubsts [(x, typ)]
 
--- freshHM :: TypeCheck n ty (ty n)
 freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 freshHM = do
   TypingContext constraints substs ctx freshId <- get
   put (TypingContext constraints substs ctx (freshId + 1))
   return (fromUVarIdent (makeIdent freshId))
-
--- generalizeHM :: (UType binder typeSig) n -> HMType (UType binder typeSig) -> TypeCheck' (UType binder typeSig) n ((UType binder typeSig) n)
--- generalizeHM whatTyp xTyp = do
---   (TypingContext' _ substs ctx _) <- get
---   let whatTyp1 = applySubstsToType substs whatTyp
---   let ctx' = fmap (applySubstsToType substs) ctx
---   let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
---   let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
---   let whatTyp2 = generalize whatFreeIdents (PolyType (TypeScheme [] whatTyp1))
---   enterScope xTyp TypeScheme (whatFreeIdents, whatTyp2) (reconstructType' eExpr) -- xTyp is not binder but type
-
--- -- >>> generalize ["?a", "?b"] "?a -> ?b -> ?a"
--- -- forall x0 . forall x1 . x0 -> x1 -> x0
--- -- >>> generalize ["?b", "?a"] "?a -> ?b -> ?a"
--- -- forall x0 . forall x1 . x1 -> x0 -> x1
 
 withGeneralizedVars ::
   (Foil.Distinct n) =>
@@ -453,47 +388,6 @@ generalize = go Foil.emptyScope
               type' = applySubstsToType substs (Foil.sink type_)
            in PolyType (TypeScheme freshNameBinders type')
 
--- go _ _ (MonoType ty) = MonoType ty
--- go _ [] type_ = type_
--- go ctx (x : xs) (PolyType (TypeScheme binders type_)) = Foil.withFresh ctx $ \binder ->
---   let newScope = Foil.extendScope binder ctx
---       x' = FreeFoil.Var (Foil.nameOf binder)
---       type' = applySubstToType (x, x') (Foil.sink type_)
---    in  (go newScope xs (PolyType (TypeScheme (Foil.NameBinderListCons binder binders) type')))
-
--- generalize :: [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
--- generalize = go Foil.emptyScope
---   where
---     go :: (Foil.Distinct n) => Foil.Scope n -> [Raw.UVarIdent] -> (UType binder typeSig) n -> HMType (UType binder typeSig)
---     go _ [] type_ = (MonoType type_)
---     go ctx (x : xs) type_ = Foil.withFresh ctx $ \binder ->
---       let newScope = Foil.extendScope binder ctx
---           x' = FreeFoil.Var (Foil.nameOf binder)
---           type' = applySubstToType (x, x') (Foil.sink type_)
---        in Polytype (go newScope xs type')
-
--- -- unify1 :: (HasUVars ty) => Constraint' (ty Foil.VoidS) -> Either String [USubst_ (ty n)]
--- -- unify1 c =
--- --   case c of
--- --     -- Case for unification variables
--- --     (TUVar x, r) -> return [(x, r)]
--- --     (l, TUVar x) -> return [(x, l)]
--- --     -- Case for Free Foil variables (not supported for now)
--- --     (FreeFoil.Var x, FreeFoil.Var y)
--- --       | x == y -> return []
--- --     -- Case of non-trivial arbitrary nodes
--- --     (FreeFoil.Node l, FreeFoil.Node r) ->
--- --       -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
--- --       --   = Just (TArrowSig (x1, y1) (x2, y2))
--- --       case FreeFoil.zipMatch l r of
--- --         Nothing -> Left ("cannot unify " ++ show l ++ show r)
--- --         -- `zipMatch` takes out corresponding terms from a node that we need
--- --         --  to unify further.
--- --         Just lr -> unify (F.toList lr) -- ignores "scopes", only works with "terms"
--- --     (lhs, rhs) -> Left ("cannot unify " ++ show lhs ++ show rhs)
-
--- infixr 6 +++
-
 (+++) :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)] -> [USubst_ (UType binder typeSig n)]
 xs +++ ys = map (applySubstsInSubsts ys) xs ++ ys
 
@@ -513,15 +407,6 @@ unifyWith ::
   [Constraint' (UType binder typeSig Foil.VoidS)] ->
   TypeCheck (UType binder typeSig) n [USubst_ (UType binder typeSig Foil.VoidS)]
 unifyWith substs constraints = unify (map (applySubstsToConstraint substs) constraints)
-
--- -- newtype TypeCheck n a = TypeCheck {runTypeCheck' :: TypingContext n -> Either String (a, TypingContext n)}
--- --   deriving (Functor)
-
--- instance Functor (TypeCheck n) where
---   fmap f (TypeCheck g) = TypeCheck $ \tc ->
---     case g tc of
---       Left err -> Left err
---       Right (x, tc') -> Right (f x, tc')
 
 applySubstsToConstraint :: (Foil.Distinct n, Bifunctor typeSig, Foil.CoSinkable binder) => [USubst_ (UType binder typeSig n)] -> Constraint' (UType binder typeSig n) -> Constraint' (UType binder typeSig n)
 applySubstsToConstraint substs (l, r) = (applySubstsToType substs l, applySubstsToType substs r)
@@ -558,20 +443,6 @@ deriving instance Functor (Foil.NameMap n)
 
 deriving instance Foldable (Foil.NameMap n)
 
--- data TypingContext ty n = TypingContext
---   { tcConstraints :: [Constraint' (ty Foil.VoidS)],
---     tcSubsts :: [USubst_ (ty Foil.VoidS)],
---     tcTypings :: Foil.NameMap n (HMType ty),
---     tcFreshId :: Int
---   }
-
--- -- data TypingContext n = TypingContext
--- --   { tcConstraints' :: [Constraint],
--- --     tcSubsts' :: [USubst' ty],
--- --     tcTypings' :: FreeFoil.NameMap n Type',
--- --     tcFreshId' :: Int
--- --   }
-
 get :: TypeCheck ty n (TypingContext ty n)
 get = TypeCheck $ \tc -> Right (tc, tc)
 
@@ -607,17 +478,6 @@ enterScope x type_ action =
 
 popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
 popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
-
--- enterScope :: Foil.NameBinder n l -> HMType ty -> TypeCheck' ty l a -> TypeCheck' ty n a
--- enterScope binder type_ code = do
---   TypingContext' constraints substs ctx freshId <- get
---   let ctx' = Foil.addNameBinder binder type_ ctx
---   (x, TypingContext' constraints'' substs'' ctx'' freshId'') <-
---     eitherToTypeCheck $
---       runTypeCheck code (TypingContext' constraints substs ctx' freshId)
---   let ctx''' = popNameBinder binder ctx''
---   put (TypingContext' constraints'' substs'' ctx''' freshId'')
---   return x
 
 addConstraints :: [Constraint' (UType binder typeSig Foil.VoidS)] -> TypeCheck (UType binder typeSig) n ()
 addConstraints constrs = do
@@ -706,80 +566,6 @@ specialize (PolyType (TypeScheme list ty)) freshId = go Foil.emptyScope list ty 
            in (FreeFoil.substitute scope subst ty', freshId')
 specialize (MonoType ty) freshId = (ty, freshId)
 
--- -- use enterScope ...
-
--- freshTypeVar :: TypeCheck' ty n (ty n)
--- freshTypeVar = do
---   TypingContext' constraints substs ctx freshId <- get
---   put (TypingContext' constraints substs ctx (freshId + 1))
---   return (TUVar (makeIdent freshId))
-
--- -- | Recursively "reconstructs" type of an expression.
--- -- On success, returns the "reconstructed" type and collected constraints.
--- -- reconstructType :: Exp n -> TypeCheck' ty n (ty n)
--- -- reconstructType ETrue = return TBool
--- -- reconstructType EFalse = return TBool
--- -- reconstructType (ENat _) = return TNat -- TypeCheck $ \tc -> Right (TNat, tc)
--- -- reconstructType (FreeFoil.Var x) = do
--- --   TypingContext' constrs subst ctx freshId <- get
--- --   let xTyp = Foil.lookupName x ctx
--- --   let (specTyp, freshId2) = specialize xTyp freshId
--- --   put (TypingContext' constrs subst ctx freshId2)
--- --   return specTyp
--- -- reconstructType (ELet eWhat (FoilPatternVar x) eExpr) = do
--- --   whatTyp <- reconstructType eWhat
--- --   unifyTypeCheck
--- --   (TypingContext' _ substs ctx _) <- get
--- --   let whatTyp1 = applySubstsToType substs whatTyp
--- --   let ctx' = fmap (applySubstsToType substs) ctx
--- --   let ctxVars = foldl (\idents typ -> idents ++ allUVarsOfType typ) [] ctx'
--- --   let whatFreeIdents = filter (\i -> not (elem i ctxVars)) (allUVarsOfType whatTyp1)
--- --   let whatTyp2 = generalize whatFreeIdents whatTyp1
--- --   enterScope x whatTyp2 (reconstructType eExpr)
--- -- reconstructType (EAdd lhs rhs) = do
--- --   lhsTyp <- reconstructType lhs
--- --   rhsTyp <- reconstructType rhs
--- --   addConstraints [(lhsTyp, TNat), (rhsTyp, TNat)]
--- --   return TNat
--- -- reconstructType (ESub lhs rhs) = do
--- --   lhsTyp <- reconstructType lhs
--- --   rhsTyp <- reconstructType rhs
--- --   addConstraints [(lhsTyp, TNat), (rhsTyp, TNat)]
--- --   return TNat
--- -- reconstructType (EIf eCond eThen eElse) = do
--- --   condTyp <- reconstructType eCond
--- --   thenTyp <- reconstructType eThen
--- --   elseTyp <- reconstructType eElse
--- --   addConstraints [(condTyp, TBool), (thenTyp, elseTyp)]
--- --   return thenTyp
--- -- reconstructType (EIsZero e) = do
--- --   eTyp <- reconstructType e
--- --   addConstraints [(eTyp, TNat)]
--- --   return TBool
--- -- reconstructType (EAbs (FoilPatternVar x) eBody) = do
--- --   paramType <- freshTypeVar
--- --   bodyTyp <-
--- --     enterScope x paramType $
--- --       reconstructType eBody
--- --   return (TArrow paramType bodyTyp)
--- -- reconstructType (EApp eAbs eArg) = do
--- --   absTyp <- reconstructType eAbs
--- --   argTyp <- reconstructType eArg
--- --   resultTyp <- freshTypeVar
--- --   addConstraints [(absTyp, TArrow argTyp resultTyp)]
--- --   return resultTyp
--- -- reconstructType (ETyped e typ_) = do
--- --   let typ = toTypeClosed typ_
--- --   eTyp <- reconstructType e
--- --   addConstraints [(eTyp, typ)]
--- --   return typ
--- -- reconstructType (EFor eFrom eTo (FoilPatternVar x) eBody) = do
--- --   fromTyp <- reconstructType eFrom
--- --   toTyp <- reconstructType eTo
--- --   addConstraints [(fromTyp, TNat), (toTyp, TNat)]
--- --   enterScope x TNat $
--- --     reconstructType eBody
-
 -- let f = λx:X?. (let g = λy:Y?. x in g) in f
 --
 -- g : Y? → X?
@@ -805,41 +591,12 @@ allUVarsOfType (FreeFoil.Node node) = bifoldMap allUVarsOfScopedType allUVarsOfT
 allUVarsOfScopedType :: (Bifoldable typeSig) => UScopedType binder typeSig n -> [Raw.UVarIdent]
 allUVarsOfScopedType (FreeFoil.ScopedAST _binder body) = allUVarsOfType body
 
--- popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
--- popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
-
--- unificationVarIdentsBetween :: Int -> Int -> [Raw.UVarIdent]
--- unificationVarIdentsBetween a b = map makeIdent [a .. (b - 1)]
-
 makeIdent :: Int -> Raw.UVarIdent
 makeIdent i = Raw.UVarIdent ("?u" ++ (show i))
 
--- -- addSubst
--- --   :: forall e i o i'. Substitution e i o
--- --   -> NameBinder i i'
--- --   -> e o
--- --   -> Substitution e i' o
-
--- -- binder :: NameBinder VoidS l0
-
--- -- addSubst identitySubst :: NameBinder io i' -> e io -> Substitution e i' io
--- -- addSubst identitySubst binder :: e VoidS -> Substitution e l0 VoidS
--- -- addSubst identitySubst binder ... :: Substitution e l0 VoidS
-
--- -- >>> specialize "forall a. forall b. a -> b" 6
--- -- (?u6 -> ?u7,8)
--- specialize :: Type' -> Int -> (Type', Int)
--- specialize (TForAll (FoilTPatternVar binder) type_) freshId =
---   let subst = Foil.addSubst Foil.identitySubst binder (TUVar (makeIdent freshId))
---    in specialize (FreeFoil.substitute Foil.emptyScope subst type_) (freshId + 1)
--- specialize type_ freshId = (type_, freshId)
-
 -- * Orphans
 
--- instance Foldable (Foil.NameMap n)
 deriving instance Traversable (Foil.NameMap n)
-
--- instance Functor (Foil.NameMap n)
 
 instance Foil.UnifiablePattern Foil.NameBinderList where
   unifyPatterns Foil.NameBinderListEmpty Foil.NameBinderListEmpty =
