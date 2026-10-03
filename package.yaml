@@ -116,3 +116,4 @@ tests:
       - hspec-discover
       - directory
       - filepath
+      - QuickCheck
