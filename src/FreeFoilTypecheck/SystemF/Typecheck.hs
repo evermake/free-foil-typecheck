@@ -27,12 +27,14 @@ import FreeFoilTypecheck.SystemF.FreeFoilExt
 
 -- $setup
 -- >>> :set -XOverloadedStrings
+
+-- | Typechecks an expression and maybe returns an error.
 -- >>> typecheckClosed "2 - (1 + 1)" "Nat"
 -- Right Nat
 -- >>> typecheckClosed "2 - (1 + true)" "Nat"
--- Left "expected type\n  Nat\nbut got type\n  Bool\nwhen typechecking expession\n  true\n"
+-- Left "expected type\n  Nat\nbut got type\n  Bool\nwhen typechecking expession\n"
 -- >>> typecheckClosed "2 - (1 + 1)" "Bool"
--- Left "expected type\n  Bool\nbut got type\n  Nat\nwhen typechecking expession\n  2 - (1 + 1)\n"
+-- Left "expected type\n  Bool\nbut got type\n  Nat\nwhen typechecking expession\n"
 -- >>> typecheckClosed "let x = 1 in let y = 2 in x + (let x = 3 in x + y)" "Nat"
 -- Right Nat
 typecheckClosed ::
