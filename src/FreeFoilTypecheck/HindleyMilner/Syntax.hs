@@ -21,6 +21,7 @@ import Data.String (IsString (..))
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Par as Raw
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Print as Raw
+import FreeFoilTypecheck.ScopeCheck (checkClosed)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
@@ -28,6 +29,7 @@ import qualified FreeFoilTypecheck.HindleyMilner.Parser.Print as Raw
 -- >>> import qualified Control.Monad.Foil as Foil
 -- >>> import Control.Monad.Free.Foil
 -- >>> import Data.String (fromString)
+-- >>> import qualified FreeFoilTypecheck.HindleyMilner.Parser.Par as Raw
 
 -- * Generated code (expressions)
 
@@ -108,6 +110,21 @@ toExp = convertToAST convertToExpSig toFoilPattern getExpFromScopedExp
 -- This is a special case of 'toExp'.
 toExpClosed :: Raw.Exp -> Exp Foil.VoidS
 toExpClosed = toExp Foil.emptyScope Map.empty
+
+-- | Like 'toExpClosed', but reports an unbound variable instead of failing
+-- with an exception.
+--
+-- >>> either id show (Raw.pExp (Raw.myLexer "let x = x in x") >>= toExpClosedChecked)
+-- "unbound variable: x"
+-- >>> either id show (Raw.pExp (Raw.myLexer "let x = 1 in x") >>= toExpClosedChecked)
+-- "let x0 = 1 in x0"
+toExpClosedChecked :: Raw.Exp -> Either String (Exp Foil.VoidS)
+toExpClosedChecked e =
+  case checkClosed convertToExpSig patternVars getExpFromScopedExp e of
+    Left (Raw.Ident x) -> Left ("unbound variable: " ++ x)
+    Right () -> Right (toExpClosed e)
+  where
+    patternVars (Raw.PatternVar x) = [x]
 
 -- | Convert a scope-safe representation back into 'Raw.Exp'.
 -- This is a special case of 'convertFromAST'.
