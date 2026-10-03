@@ -14,20 +14,54 @@ import Test.QuickCheck
 spec :: Spec
 spec =
   describe "level-based and naive generalisation agree on random MiniML terms" $
-    modifyMaxSuccess (const 3000) $
-      prop "levels = naive" $
-        forAll (sized (genExp [])) $ \raw ->
-          let expr = toExpClosed raw
-              levels = inferTypeSchemeClosed LevelBased expr
-              naive = inferTypeSchemeClosed Naive expr
-              agree = case (levels, naive) of
-                (Left _, Left _) -> True
-                (Right t1, Right t2) -> equivUpToRenaming t1 t2
-                _ -> False
-           in classify (either (const False) (const True) levels) "well-typed" $
-                counterexample (printTree raw) $
-                  counterexample (either ("error: " ++) showHMType levels) $
-                    counterexample (either ("error: " ++) showHMType naive) agree
+    modifyMaxSuccess (const 3000) $ do
+      prop "levels = naive (all constructs)" $
+        forAll (sized (genExp [])) agreeOn
+      prop "levels = naive (λ, application, let and letrec only)" $
+        forAll (sized (genPureExp [])) agreeOn
+
+agreeOn :: Raw.Exp -> Property
+agreeOn raw =
+  let expr = toExpClosed raw
+      levels = inferTypeSchemeClosed LevelBased expr
+      naive = inferTypeSchemeClosed Naive expr
+      agree = case (levels, naive) of
+        (Left _, Left _) -> True
+        (Right t1, Right t2) -> equivUpToRenaming t1 t2
+        _ -> False
+   in classify (either (const False) (const True) levels) "well-typed" $
+        counterexample (printTree raw) $
+          counterexample (either ("error: " ++) showHMType levels) $
+            counterexample (either ("error: " ++) showHMType naive) agree
+
+-- | Random closed terms with variables, λ, application, let and letrec only.
+genPureExp :: [Raw.Ident] -> Int -> Gen Raw.Exp
+genPureExp scope size
+  | size <= 1 || null scope = if null scope then binder Raw.EAbs else variable
+  | otherwise =
+      frequency
+        [ (2, variable),
+          (3, binder Raw.EAbs),
+          (4, Raw.EApp <$> genPureExp scope (size `div` 2) <*> genPureExp scope (size `div` 2)),
+          (3, letExpression),
+          (1, letRec)
+        ]
+  where
+    variable = Raw.EVar <$> elements scope
+    name = elements (map Raw.Ident ["x", "y", "z", "f", "g"])
+    binder con = do
+      x <- name
+      con (Raw.PatternVar x) . Raw.ScopedExp <$> genPureExp (x : scope) (size - 1)
+    letExpression = do
+      x <- name
+      bound <- genPureExp scope (size `div` 2)
+      body <- genPureExp (x : scope) (size `div` 2)
+      return (Raw.ELet (Raw.PatternVar x) bound (Raw.ScopedExp body))
+    letRec = do
+      x <- name
+      bound <- genPureExp (x : scope) (size `div` 2)
+      body <- genPureExp (x : scope) (size `div` 2)
+      return (Raw.ELetRec (Raw.PatternVar x) (Raw.ScopedExp bound) (Raw.ScopedExp body))
 
 -- | Random closed MiniML terms (without annotations). Binders get random
 -- patterns ('genPattern').

@@ -42,15 +42,19 @@ spec = do
             expectationFailure (unlines (map showVerdict results))
 
   describe "generic and language-specific engines agree on random closed terms" $
-    modifyMaxSuccess (const 3000) $
-      prop "levels = naive = language-specific" $
-        forAll (sized (genExp [])) $ \raw ->
-          let expr = toExpClosed raw
-              results = verdicts expr
-           in classify (any isAccepted results) "well-typed" $
-                counterexample (printTree raw) $
-                  counterexample (unlines (map showVerdict results)) $
-                    allAgree results
+    modifyMaxSuccess (const 3000) $ do
+      prop "levels = naive = language-specific (all constructs)" $
+        forAll (sized (genExp [])) agreeOn
+      prop "levels = naive = language-specific (λ, application and let only)" $
+        forAll (sized (genPureExp [])) agreeOn
+
+agreeOn :: Raw.Exp -> Property
+agreeOn raw =
+  let results = verdicts (toExpClosed raw)
+   in classify (any isAccepted results) "well-typed" $
+        counterexample (printTree raw) $
+          counterexample (unlines (map showVerdict results)) $
+            allAgree results
 
 -- | The verdict of one engine: an error, or a type scheme.
 type Verdict = Either String (HMType (UType FoilTypePattern TypeSig))
@@ -78,6 +82,31 @@ allAgree (v : vs) = all (agree v) vs
 
 showVerdict :: Verdict -> String
 showVerdict = either ("error: " ++) showHMType
+
+-- | Random closed terms of the pure fragment (variables, λ, application, let),
+-- where well-typed terms are more frequent. Level adjustment matters for terms
+-- such as @λx. let y = λz. x z in y@.
+genPureExp :: [Raw.Ident] -> Int -> Gen Raw.Exp
+genPureExp scope size
+  | size <= 1 || null scope = if null scope then abstraction else variable
+  | otherwise =
+      frequency
+        [ (2, variable),
+          (3, abstraction),
+          (4, Raw.EApp <$> genPureExp scope (size `div` 2) <*> genPureExp scope (size `div` 2)),
+          (4, letExpression)
+        ]
+  where
+    variable = Raw.EVar <$> elements scope
+    name = elements (map Raw.Ident ["x", "y", "z", "f", "g"])
+    abstraction = do
+      x <- name
+      Raw.EAbs (Raw.PatternVar x) . Raw.ScopedExp <$> genPureExp (x : scope) (size - 1)
+    letExpression = do
+      x <- name
+      bound <- genPureExp scope (size `div` 2)
+      body <- genPureExp (x : scope) (size `div` 2)
+      return (Raw.ELet (Raw.PatternVar x) bound (Raw.ScopedExp body))
 
 -- | Random closed terms of the HM language (without annotations).
 -- Variables are drawn from a small pool, so that shadowing occurs.
