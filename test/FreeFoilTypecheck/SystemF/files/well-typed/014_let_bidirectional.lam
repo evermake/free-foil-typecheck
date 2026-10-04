@@ -1,0 +1,1 @@
+(let const = 1 in λf. const) : Bool -> Nat

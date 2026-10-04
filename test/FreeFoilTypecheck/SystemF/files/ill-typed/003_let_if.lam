@@ -1,0 +1,3 @@
+let x = 100 in
+  let y = false in
+    if iszero (y - x - x) then y + y else x + 10
