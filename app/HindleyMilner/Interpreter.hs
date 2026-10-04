@@ -16,3 +16,4 @@ errorCode :: ErrorKind -> Int
 errorCode ParsingError = 1
 errorCode TypecheckingError = 2
 errorCode EvaluationError = 3
+errorCode ScopeError = 4

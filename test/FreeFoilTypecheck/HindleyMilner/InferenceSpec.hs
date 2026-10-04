@@ -31,6 +31,7 @@ spec = parallel $ do
 
 isTypeError :: Result -> Bool
 isTypeError (Failure TypecheckingError _) = True
+isTypeError (Failure ScopeError _) = True
 isTypeError _ = False
 
 testFilesInDir :: FilePath -> IO [FilePath]
