@@ -45,4 +45,4 @@ checkClosedWith initial peel binders unscope = go (Set.fromList initial)
       Right node -> bitraverse_ goScoped (go bound) node
       where
         goScoped (pat, scoped) =
-          go (foldr Set.insert bound (binders pat)) (unscope scoped)
+          go (bound `Set.union` Set.fromList (binders pat)) (unscope scoped)
