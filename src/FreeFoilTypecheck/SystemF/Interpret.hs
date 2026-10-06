@@ -1,10 +1,14 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 module FreeFoilTypecheck.SystemF.Interpret where
 
 import Control.Monad.Foil (emptyNameMap)
 import FreeFoilTypecheck.SystemF.Eval
 import FreeFoilTypecheck.SystemF.Parser.Par
-import FreeFoilTypecheck.SystemF.Syntax (toTermClosed)
-import FreeFoilTypecheck.SystemF.Typecheck
+import FreeFoilTypecheck.SystemF.Syntax (toTermClosed, Term(..))
+import FreeFoilTypecheck.SystemF.Typecheck (inferType)
+import FreeFoilTypecheck.SystemF.TypecheckGen (bidirectionalCheckInfer, infer)
+import FreeFoilTypecheck.SystemF.TypingSig ()
 
 data Result
   = Success String -- Output of evaluation.
@@ -23,7 +27,21 @@ interpret input =
     Left err -> Failure ParsingError ("Parsing error: " ++ err)
     Right e -> case inferType emptyNameMap e of
       Left err -> Failure TypecheckingError ("Typechecking error: " ++ err)
-      Right _type -> case eval emptyNameMap e of
+      Right _type -> case newEval emptyNameMap e of
+        Left err -> Failure EvaluationError ("Evaluation error: " ++ err)
+        Right outExp -> Success (show outExp)
+  where
+    tokens = myLexer input
+
+interpretGen :: String -> Result
+interpretGen input =
+  case toTermClosed <$> pTerm tokens of
+    Left err -> Failure ParsingError ("Parsing error: " ++ err)
+    Right et@(Term e) -> case do
+      checkInfer <- bidirectionalCheckInfer @Term emptyNameMap e
+      infer checkInfer of
+      Left err -> Failure TypecheckingError ("Typechecking error: " ++ err)
+      Right _type -> case newEval emptyNameMap et of
         Left err -> Failure EvaluationError ("Evaluation error: " ++ err)
         Right outExp -> Success (show outExp)
   where

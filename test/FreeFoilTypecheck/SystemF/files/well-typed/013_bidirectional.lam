@@ -1,1 +1,1 @@
-if false then (λf. if f then 0 else 1) else (λx. 1) : Bool -> Nat
+if false then (λf:Bool. if f then 0 else 1) else (λx. 1) : Bool -> Nat

@@ -41,6 +41,7 @@ library
       FreeFoilTypecheck.HindleyMilner.Syntax
       FreeFoilTypecheck.ScopeCheck
       FreeFoilTypecheck.SystemF.Eval
+      FreeFoilTypecheck.SystemF.FreeFoilExt
       FreeFoilTypecheck.SystemF.Interpret
       FreeFoilTypecheck.SystemF.Parser.Abs
       FreeFoilTypecheck.SystemF.Parser.Lex
@@ -50,6 +51,8 @@ library
       FreeFoilTypecheck.SystemF.Syntax.Pattern
       FreeFoilTypecheck.SystemF.Syntax.Term
       FreeFoilTypecheck.SystemF.Typecheck
+      FreeFoilTypecheck.SystemF.TypecheckGen
+      FreeFoilTypecheck.SystemF.TypingSig
   other-modules:
       Paths_free_foil_typecheck
   hs-source-dirs:
