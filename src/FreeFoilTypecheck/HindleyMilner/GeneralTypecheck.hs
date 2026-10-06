@@ -313,8 +313,10 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
       retType <- freshHM
       _ <- unifyHM funType (FreeFoil.Node (L2 (TArrowSig argType retType)))
       return retType
-    ETypedSig ty _ -> do
-      return ty
+    ETypedSig ty annotation -> do
+      let annotationType = injectUType' (toTypeClosed annotation)
+      _ <- unifyHM ty annotationType
+      return annotationType
     ENatSig _ -> do
       return (injectUType TNat)
     EForSig fromTy toTy inferBody -> do
@@ -379,8 +381,10 @@ unifyHM typ1 typ2 = do
       typ2' = applySubstsToType tcSubsts typ2
   case (typ1', typ2') of
     -- Case for unification variables
-    (toUVarIdent -> Just x, r) -> addSubsts [(x, r)]
-    (l, toUVarIdent -> Just x) -> addSubsts [(x, l)]
+    (toUVarIdent -> Just x, toUVarIdent -> Just y)
+      | x == y -> return ()
+    (toUVarIdent -> Just x, r) -> bindUVar x r
+    (l, toUVarIdent -> Just x) -> bindUVar x l
     -- Case for Free Foil variables (not supported for now)
     (FreeFoil.Var x, FreeFoil.Var y)
       | x == y -> addSubsts []
@@ -395,6 +399,10 @@ unifyHM typ1 typ2 = do
         Just lr -> do
           bitraverse_ (\_ -> failTypeCheck "Unable to unify scoped type") (uncurry unifyHM) lr -- ignores "scopes", only works with "terms"
     (_, _) -> failTypeCheck ("cannot unify ") -- ++ lhs ++ rhs)
+  where
+    bindUVar x typ
+      | x `elem` allUVarsOfType typ = failTypeCheck "occurs check failed"
+      | otherwise = addSubsts [(x, typ)]
 
 -- freshHM :: TypeCheck n ty (ty n)
 freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
@@ -493,14 +501,11 @@ unify ::
   (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) =>
   [Constraint' (UType binder typeSig Foil.VoidS)] ->
   TypeCheck (UType binder typeSig) n ([USubst_ (UType binder typeSig Foil.VoidS)])
-unify [] = do
+unify constraints = do
+  -- 'unifyHM' applies the current substitution and extends it in the context
+  mapM_ (uncurry unifyHM) constraints
   TypingContext _ substs _ _ <- get
   return substs
-unify (c : cs) = do
-  _ <- uncurry unifyHM c
-  TypingContext _ substs _ _ <- get
-  substs' <- unify (map (applySubstsToConstraint substs) cs)
-  return (substs +++ substs')
 
 unifyWith ::
   (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) =>
@@ -580,8 +585,9 @@ eitherToTypeCheck (Right x) = TypeCheck $ \tc -> Right (x, tc)
 unifyTypeCheck :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) => TypeCheck (UType binder typeSig) n ()
 unifyTypeCheck = do
   TypingContext constraints substs ctx freshId <- get
-  substs' <- unifyWith substs constraints
-  put (TypingContext [] (substs +++ substs') ctx freshId)
+  put (TypingContext [] substs ctx freshId)
+  _ <- unifyWith substs constraints
+  return ()
 
 class TypedPattern ty binder where
   enterScopePattern :: binder n l -> HMType ty -> TypeCheck ty l a -> TypeCheck ty n a

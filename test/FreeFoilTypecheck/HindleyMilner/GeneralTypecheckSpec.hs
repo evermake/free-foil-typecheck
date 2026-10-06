@@ -10,10 +10,15 @@ import Control.Monad (forM_)
 import Data.Either (isLeft)
 import Data.List (isSuffixOf, nub, sort)
 import FreeFoilTypecheck.HindleyMilner.GeneralTypecheck
-  ( allUVarsOfType,
+  ( TypeCheck (..),
+    TypingContext (..),
+    UType,
+    allUVarsOfType,
     alphaEquiv,
+    emptyTypingContext,
     equivHMType,
     generalize,
+    inferTypeNewClosed,
     injectUType',
     testInferTypeNewClosed,
   )
@@ -38,6 +43,28 @@ spec = parallel $ do
     forM_ (sort paths) $ \path -> it path $ do
       contents <- readFile path
       genericRejects contents `shouldBe` Right True
+
+  describe "substitution (generic engine)" $
+    forM_ [1 .. 8 :: Int] $ \n ->
+      it ("binds each unification variable at most once after " ++ show n ++ " nested lets") $ do
+        let expr = toExpClosed (either error id (pExp (myLexer (nestedLets n))))
+        case runTypeCheck (inferHM expr) emptyTypingContext of
+          Left err -> expectationFailure err
+          Right (_type, ctx) -> do
+            let vars = map fst (tcSubsts ctx)
+            length vars `shouldBe` length (nub vars)
+            length vars `shouldSatisfy` (<= tcFreshId ctx)
+
+inferHM :: Exp' -> TypeCheck (UType FoilTypePattern TypeSig) Foil.VoidS (UType FoilTypePattern TypeSig Foil.VoidS)
+inferHM = inferTypeNewClosed
+
+-- | @λf0. let f1 = λx. f0 x in … let fn = λx. f(n-1) x in fn@
+nestedLets :: Int -> String
+nestedLets n =
+  "λf0. "
+    ++ concat ["let f" ++ show i ++ " = λx. f" ++ show (i - 1) ++ " x in " | i <- [1 .. n]]
+    ++ "f"
+    ++ show n
 
 -- | Whether the generic engine rejects a program (with a scope or type error).
 -- A parsing error is reported as 'Left', since test programs must parse.
