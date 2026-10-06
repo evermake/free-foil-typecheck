@@ -9,6 +9,7 @@ module FreeFoilTypecheck.HindleyMilner.Parser.Par
   ( happyError
   , myLexer
   , pPattern
+  , pExp4
   , pExp3
   , pExp2
   , pExp1
@@ -29,6 +30,7 @@ import FreeFoilTypecheck.HindleyMilner.Parser.Lex
 }
 
 %name pPattern Pattern
+%name pExp4 Exp4
 %name pExp3 Exp3
 %name pExp2 Exp2
 %name pExp1 Exp1
@@ -87,19 +89,24 @@ Pattern :: { FreeFoilTypecheck.HindleyMilner.Parser.Abs.Pattern }
 Pattern
   : Ident { FreeFoilTypecheck.HindleyMilner.Parser.Abs.PatternVar $1 }
 
-Exp3 :: { FreeFoilTypecheck.HindleyMilner.Parser.Abs.Exp }
-Exp3
+Exp4 :: { FreeFoilTypecheck.HindleyMilner.Parser.Abs.Exp }
+Exp4
   : Ident { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EVar $1 }
   | 'true' { FreeFoilTypecheck.HindleyMilner.Parser.Abs.ETrue }
   | 'false' { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EFalse }
   | Integer { FreeFoilTypecheck.HindleyMilner.Parser.Abs.ENat $1 }
   | '(' Exp ')' { $2 }
 
+Exp3 :: { FreeFoilTypecheck.HindleyMilner.Parser.Abs.Exp }
+Exp3
+  : Exp3 '+' Exp4 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAdd $1 $3 }
+  | Exp3 '-' Exp4 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.ESub $1 $3 }
+  | 'iszero' Exp4 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIsZero $2 }
+  | Exp4 { $1 }
+
 Exp2 :: { FreeFoilTypecheck.HindleyMilner.Parser.Abs.Exp }
 Exp2
-  : Exp2 '+' Exp3 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAdd $1 $3 }
-  | Exp2 '-' Exp3 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.ESub $1 $3 }
-  | 'iszero' '(' Exp ')' { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIsZero $3 }
+  : Exp2 Exp3 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EApp $1 $2 }
   | Exp3 { $1 }
 
 Exp1 :: { FreeFoilTypecheck.HindleyMilner.Parser.Abs.Exp }
@@ -107,7 +114,6 @@ Exp1
   : 'if' Exp1 'then' Exp1 'else' Exp1 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIf $2 $4 $6 }
   | 'let' Pattern '=' Exp1 'in' ScopedExp { FreeFoilTypecheck.HindleyMilner.Parser.Abs.ELet $2 $4 $6 }
   | 'λ' Pattern '.' ScopedExp { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAbs $2 $4 }
-  | Exp1 Exp2 { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EApp $1 $2 }
   | 'for' Pattern 'in' '[' Exp1 '..' Exp1 ']' 'do' ScopedExp { FreeFoilTypecheck.HindleyMilner.Parser.Abs.EFor $2 $5 $7 $10 }
   | Exp2 { $1 }
 

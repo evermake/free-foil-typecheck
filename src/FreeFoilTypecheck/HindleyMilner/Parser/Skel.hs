@@ -35,13 +35,13 @@ transExp x = case x of
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.ENat integer -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAdd exp1 exp2 -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.ESub exp1 exp2 -> failure x
-  FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIf exp1 exp2 exp3 -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIsZero exp -> failure x
-  FreeFoilTypecheck.HindleyMilner.Parser.Abs.ETyped exp type_ -> failure x
+  FreeFoilTypecheck.HindleyMilner.Parser.Abs.EApp exp1 exp2 -> failure x
+  FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIf exp1 exp2 exp3 -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.ELet pattern_ exp scopedexp -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAbs pattern_ scopedexp -> failure x
-  FreeFoilTypecheck.HindleyMilner.Parser.Abs.EApp exp1 exp2 -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.EFor pattern_ exp1 exp2 scopedexp -> failure x
+  FreeFoilTypecheck.HindleyMilner.Parser.Abs.ETyped exp type_ -> failure x
 
 transScopedExp :: FreeFoilTypecheck.HindleyMilner.Parser.Abs.ScopedExp -> Result
 transScopedExp x = case x of
@@ -56,8 +56,8 @@ transType x = case x of
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.TUVar uvarident -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.TNat -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.TBool -> failure x
-  FreeFoilTypecheck.HindleyMilner.Parser.Abs.TArrow type_1 type_2 -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.TVar ident -> failure x
+  FreeFoilTypecheck.HindleyMilner.Parser.Abs.TArrow type_1 type_2 -> failure x
   FreeFoilTypecheck.HindleyMilner.Parser.Abs.TForAll typepattern scopedtype -> failure x
 
 transScopedType :: FreeFoilTypecheck.HindleyMilner.Parser.Abs.ScopedType -> Result

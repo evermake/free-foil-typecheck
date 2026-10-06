@@ -1,11 +1,11 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module FreeFoilTypecheck.HindleyMilner.Syntax where
@@ -15,12 +15,15 @@ import Control.Monad.Foil.TH
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.TH
 import Data.Bifunctor.TH
+import Data.Bifunctor.Sum(Sum(..))
 import Data.Map (Map)
+import qualified Data.Kind as K
 import qualified Data.Map as Map
 import Data.String (IsString (..))
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Par as Raw
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Print as Raw
+import FreeFoilTypecheck.ScopeCheck (checkClosed)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
@@ -28,6 +31,7 @@ import qualified FreeFoilTypecheck.HindleyMilner.Parser.Print as Raw
 -- >>> import qualified Control.Monad.Foil as Foil
 -- >>> import Control.Monad.Free.Foil
 -- >>> import Data.String (fromString)
+-- >>> import qualified FreeFoilTypecheck.HindleyMilner.Parser.Par as Raw
 
 -- * Generated code (expressions)
 
@@ -43,8 +47,6 @@ deriveBitraversable ''ExpSig
 
 mkPatternSynonyms ''ExpSig
 
-{-# COMPLETE Var, ETrue, EFalse, ENat, EAdd, ESub, EIf, EIsZero, ETyped, ELet, EAbs, EApp, EFor #-}
-
 -- ** Conversion helpers
 
 mkConvertToFreeFoil ''Raw.Exp ''Raw.Ident ''Raw.ScopedExp ''Raw.Pattern
@@ -56,6 +58,9 @@ mkFoilPattern ''Raw.Ident ''Raw.Pattern
 deriveCoSinkable ''Raw.Ident ''Raw.Pattern
 mkToFoilPattern ''Raw.Ident ''Raw.Pattern
 mkFromFoilPattern ''Raw.Ident ''Raw.Pattern
+
+instance Foil.UnifiablePattern FoilPattern where
+  unifyPatterns (FoilPatternVar x) (FoilPatternVar y) = Foil.unifyNameBinders x y
 
 -- * Generated code (types)
 
@@ -70,8 +75,6 @@ deriveBitraversable ''TypeSig
 -- ** Pattern synonyms
 
 mkPatternSynonyms ''TypeSig
-
-{-# COMPLETE Var, TUVar, TNat, TBool, TArrow, TForAll #-}
 
 -- ** Conversion helpers
 
@@ -92,7 +95,9 @@ instance Foil.UnifiablePattern FoilTypePattern where
 
 type Exp n = AST FoilPattern ExpSig n
 
-type Type n = AST FoilTypePattern TypeSig n
+type Exp' = Exp Foil.VoidS
+
+type Type = AST FoilTypePattern TypeSig
 
 type Type' = Type Foil.VoidS
 
@@ -107,6 +112,21 @@ toExp = convertToAST convertToExpSig toFoilPattern getExpFromScopedExp
 -- This is a special case of 'toExp'.
 toExpClosed :: Raw.Exp -> Exp Foil.VoidS
 toExpClosed = toExp Foil.emptyScope Map.empty
+
+-- | Like 'toExpClosed', but reports an unbound variable instead of failing
+-- with an exception.
+--
+-- >>> either id show (Raw.pExp (Raw.myLexer "let x = x in x") >>= toExpClosedChecked)
+-- "unbound variable: x"
+-- >>> either id show (Raw.pExp (Raw.myLexer "let x = 1 in x") >>= toExpClosedChecked)
+-- "let x0 = 1 in x0"
+toExpClosedChecked :: Raw.Exp -> Either String (Exp Foil.VoidS)
+toExpClosedChecked e =
+  case checkClosed convertToExpSig patternVars getExpFromScopedExp e of
+    Left (Raw.Ident x) -> Left ("unbound variable: " ++ x)
+    Right () -> Right (toExpClosed e)
+  where
+    patternVars (Raw.PatternVar x) = [x]
 
 -- | Convert a scope-safe representation back into 'Raw.Exp'.
 -- This is a special case of 'convertFromAST'.
@@ -169,9 +189,8 @@ fromType =
 
 -- | Parse scope-safe terms via raw representation.
 --
--- TODO: fix this example
--- -- >>> fromString "let x = 2 + 2 in let y = x - 1 in let x = 3 in y + x + y" :: Type Foil.VoidS
--- -- let x0 = 2 + 2 in let x1 = x0 - 1 in let x2 = 3 in x1 + x2 + x1
+-- >>> fromString "forall x. x -> ?u1 -> Bool -> Nat" :: Type Foil.VoidS
+-- forall x0 . x0 -> ?u1 -> Bool -> Nat
 instance IsString (Type Foil.VoidS) where
   fromString input = case Raw.pType (Raw.myLexer input) of
     Left err -> error ("could not parse expression: " <> input <> "\n  " <> err)
@@ -183,3 +202,7 @@ instance Show (Type n) where
 
 instance Eq (Type Foil.VoidS) where
   (==) = alphaEquiv Foil.emptyScope
+
+pattern TArrow' :: forall {binder :: Foil.S -> Foil.S -> K.Type} {q :: K.Type -> K.Type -> K.Type} {n :: Foil.S}. AST binder (Sum TypeSig q) n
+                  -> AST binder (Sum TypeSig q) n -> AST binder (Sum TypeSig q) n
+pattern TArrow' a b = Node (L2 (TArrowSig a b))

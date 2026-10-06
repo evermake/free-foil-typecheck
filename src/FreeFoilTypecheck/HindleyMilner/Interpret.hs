@@ -4,9 +4,9 @@ module FreeFoilTypecheck.HindleyMilner.Interpret where
 
 import Control.Monad.Foil (S (VoidS), emptyScope)
 import FreeFoilTypecheck.HindleyMilner.Eval
+import FreeFoilTypecheck.HindleyMilner.Inference
 import FreeFoilTypecheck.HindleyMilner.Parser.Par
-import FreeFoilTypecheck.HindleyMilner.Syntax (Exp, Type', toExpClosed)
-import FreeFoilTypecheck.HindleyMilner.Typecheck
+import FreeFoilTypecheck.HindleyMilner.Syntax (Exp, Type', toExpClosedChecked)
 
 data Result
   = Success (Exp VoidS, Type') -- Output of evaluation.
@@ -15,18 +15,21 @@ data Result
 
 data ErrorKind
   = ParsingError
+  | ScopeError
   | TypecheckingError
   | EvaluationError
   deriving (Show)
 
 interpret :: String -> Result
 interpret input =
-  case toExpClosed <$> pExp tokens of
+  case pExp tokens of
     Left err -> Failure ParsingError ("Parsing error: " ++ err)
-    Right e -> case inferTypeNewClosed e of
-      Left err -> Failure TypecheckingError ("Typechecking error: " ++ err)
-      Right type_ -> case eval emptyScope e of
-        Left err -> Failure EvaluationError ("Evaluation error: " ++ err)
-        Right outExp -> Success (outExp, type_)
+    Right raw -> case toExpClosedChecked raw of
+      Left err -> Failure ScopeError ("Scope error: " ++ err)
+      Right e -> case inferTypeClosed e of
+        Left err -> Failure TypecheckingError ("Typechecking error: " ++ err)
+        Right type_ -> case eval emptyScope e of
+          Left err -> Failure EvaluationError ("Evaluation error: " ++ err)
+          Right outExp -> Success (outExp, type_)
   where
     tokens = myLexer input

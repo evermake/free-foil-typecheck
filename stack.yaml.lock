@@ -11,6 +11,13 @@ packages:
       size: 1853
   original:
     hackage: free-foil-0.2.0@sha256:7f99c518a63ff314c7c8ca9776625e22ef56c5170593b52c82fea6f461ac753b,3300
+- completed:
+    hackage: kind-generics-th-0.2.3.3@sha256:fc5f3aee46725e048a0159d73612a5d86c30017cd24ebab764347b65cffbd1d4,1519
+    pantry-tree:
+      sha256: 5dd528fca535a2b51cd45883520bc2fd86aca078436132bee42fa21218a21a2a
+      size: 328
+  original:
+    hackage: kind-generics-th-0.2.3.3@sha256:fc5f3aee46725e048a0159d73612a5d86c30017cd24ebab764347b65cffbd1d4,1519
 snapshots:
 - completed:
     sha256: 2b63732cfb5782292320fdba3920b71a2144d1265018f0312cb35b0ce04e78f5

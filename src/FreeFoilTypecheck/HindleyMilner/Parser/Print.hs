@@ -147,19 +147,19 @@ instance Print FreeFoilTypecheck.HindleyMilner.Parser.Abs.Pattern where
 
 instance Print FreeFoilTypecheck.HindleyMilner.Parser.Abs.Exp where
   prt i = \case
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EVar id_ -> prPrec i 3 (concatD [prt 0 id_])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ETrue -> prPrec i 3 (concatD [doc (showString "true")])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EFalse -> prPrec i 3 (concatD [doc (showString "false")])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ENat n -> prPrec i 3 (concatD [prt 0 n])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAdd exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, doc (showString "+"), prt 3 exp2])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ESub exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, doc (showString "-"), prt 3 exp2])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EVar id_ -> prPrec i 4 (concatD [prt 0 id_])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ETrue -> prPrec i 4 (concatD [doc (showString "true")])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EFalse -> prPrec i 4 (concatD [doc (showString "false")])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ENat n -> prPrec i 4 (concatD [prt 0 n])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAdd exp1 exp2 -> prPrec i 3 (concatD [prt 3 exp1, doc (showString "+"), prt 4 exp2])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ESub exp1 exp2 -> prPrec i 3 (concatD [prt 3 exp1, doc (showString "-"), prt 4 exp2])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIsZero exp -> prPrec i 3 (concatD [doc (showString "iszero"), prt 4 exp])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EApp exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, prt 3 exp2])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIf exp1 exp2 exp3 -> prPrec i 1 (concatD [doc (showString "if"), prt 1 exp1, doc (showString "then"), prt 1 exp2, doc (showString "else"), prt 1 exp3])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EIsZero exp -> prPrec i 2 (concatD [doc (showString "iszero"), doc (showString "("), prt 0 exp, doc (showString ")")])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ETyped exp type_ -> prPrec i 0 (concatD [prt 1 exp, doc (showString ":"), prt 0 type_])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.ELet pattern_ exp scopedexp -> prPrec i 1 (concatD [doc (showString "let"), prt 0 pattern_, doc (showString "="), prt 1 exp, doc (showString "in"), prt 0 scopedexp])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.EAbs pattern_ scopedexp -> prPrec i 1 (concatD [doc (showString "\955"), prt 0 pattern_, doc (showString "."), prt 0 scopedexp])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.EApp exp1 exp2 -> prPrec i 1 (concatD [prt 1 exp1, prt 2 exp2])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.EFor pattern_ exp1 exp2 scopedexp -> prPrec i 1 (concatD [doc (showString "for"), prt 0 pattern_, doc (showString "in"), doc (showString "["), prt 1 exp1, doc (showString ".."), prt 1 exp2, doc (showString "]"), doc (showString "do"), prt 0 scopedexp])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.ETyped exp type_ -> prPrec i 0 (concatD [prt 1 exp, doc (showString ":"), prt 0 type_])
 
 instance Print FreeFoilTypecheck.HindleyMilner.Parser.Abs.ScopedExp where
   prt i = \case
@@ -174,8 +174,8 @@ instance Print FreeFoilTypecheck.HindleyMilner.Parser.Abs.Type where
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.TUVar uvarident -> prPrec i 2 (concatD [prt 0 uvarident])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.TNat -> prPrec i 2 (concatD [doc (showString "Nat")])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.TBool -> prPrec i 2 (concatD [doc (showString "Bool")])
-    FreeFoilTypecheck.HindleyMilner.Parser.Abs.TArrow type_1 type_2 -> prPrec i 1 (concatD [prt 2 type_1, doc (showString "->"), prt 1 type_2])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.TVar id_ -> prPrec i 2 (concatD [prt 0 id_])
+    FreeFoilTypecheck.HindleyMilner.Parser.Abs.TArrow type_1 type_2 -> prPrec i 1 (concatD [prt 2 type_1, doc (showString "->"), prt 1 type_2])
     FreeFoilTypecheck.HindleyMilner.Parser.Abs.TForAll typepattern scopedtype -> prPrec i 0 (concatD [doc (showString "forall"), prt 0 typepattern, doc (showString "."), prt 0 scopedtype])
 
 instance Print FreeFoilTypecheck.HindleyMilner.Parser.Abs.ScopedType where

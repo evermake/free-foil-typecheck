@@ -25,13 +25,13 @@ data Exp
     | ENat Integer
     | EAdd Exp Exp
     | ESub Exp Exp
-    | EIf Exp Exp Exp
     | EIsZero Exp
-    | ETyped Exp Type
+    | EApp Exp Exp
+    | EIf Exp Exp Exp
     | ELet Pattern Exp ScopedExp
     | EAbs Pattern ScopedExp
-    | EApp Exp Exp
     | EFor Pattern Exp Exp ScopedExp
+    | ETyped Exp Type
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data ScopedExp = ScopedExp Exp
@@ -44,8 +44,8 @@ data Type
     = TUVar UVarIdent
     | TNat
     | TBool
-    | TArrow Type Type
     | TVar Ident
+    | TArrow Type Type
     | TForAll TypePattern ScopedType
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 

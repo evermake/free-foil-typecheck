@@ -26,6 +26,36 @@ The repository has the following directory structure:
 
 Contents of the mentioned directories are divided for Hindley-Milner and System F implementations.
 
+## Level-based generalisation in Hindley–Milner inference
+
+The Hindley–Milner type inference (`src/FreeFoilTypecheck/HindleyMilner/Inference.hs`) generalises the types of `let`-bound expressions using levels, following Rémy [^8] and the presentation by Kiselyov [^12]. Instead of scanning the typing environment for free unification variables at every `let`, the inference works as follows:
+
+- every unification variable records the level at which it was created;
+- the bound expression of a `let` is inferred one level deeper (`enterLevel`);
+- when unification binds a variable to a type, it performs an occurs check and lowers the levels of the variables in that type to the level of the bound variable;
+- after the bound expression is inferred, its type is generalised over the unification variables whose level is above the current one.
+
+Intuitively, a unification variable whose level is above the current one does not occur in the typing environment, so it is safe to generalise it.
+
+The test programs in `test/FreeFoilTypecheck/HindleyMilner/files/` include the examples from Kiselyov's article (`kiselyov_*.lam`). Each well-typed program has its expected type in a `*.expected.lam` file.
+
+## Building and testing
+
+The project is built with [Stack](https://docs.haskellstack.org/):
+
+```sh
+stack build
+stack test
+```
+
+The REPLs read one expression per line, and the interpreters read a program from the standard input:
+
+```sh
+stack run repl-hm                # Hindley–Milner
+stack run repl-sf                # System F
+stack run interpreter-hm < test/FreeFoilTypecheck/HindleyMilner/files/well-typed/kiselyov_16.lam
+```
+
 ---
 
 [^1]: Nikolai Kudasov, Renata Shakirova, Egor Shalagin, and Karina Tyulebaeva. 2024. Free Foil: Generating Efficient and Scope-Safe Abstract Syntax. In 2024 4th International Conference on Code Quality (ICCQ). 1–16. https://doi.org/10.1109/ICCQ60895.2024.10576867
@@ -40,3 +70,4 @@ Contents of the mentioned directories are divided for Hindley-Milner and System 
 [^9]: Martin Odersky, Martin Sulzmann, and Martin Wehr. 1999. Type inference with constrained types. Theory and practice of object systems 5, 1 (1999), 35–55.
 [^10]: Mark P Jones. 1999. Typing Haskell in Haskell. In _Haskell workshop_, Vol. 7.
 [^11]: Francesco Mazzoli and Andreas Abel. 2016. Typechecking through unification. arXiv:1609.09709 [cs.PL] https://arxiv.org/abs/1609.09709
+[^12]: Oleg Kiselyov. 2013. How OCaml type checker works – or what polymorphism and garbage collection have in common. https://okmij.org/ftp/ML/generalization.html
