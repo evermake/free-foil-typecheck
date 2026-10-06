@@ -31,6 +31,7 @@ custom-setup
 library
   exposed-modules:
       FreeFoilTypecheck.HindleyMilner.Eval
+      FreeFoilTypecheck.HindleyMilner.GeneralTypecheck
       FreeFoilTypecheck.HindleyMilner.Inference
       FreeFoilTypecheck.HindleyMilner.Interpret
       FreeFoilTypecheck.HindleyMilner.Parser.Abs
@@ -66,6 +67,7 @@ library
     , containers
     , free-foil >=0.2.0
     , hashable >=1.4.0
+    , kind-generics-th >=0.2.3
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -87,6 +89,7 @@ executable interpreter-hm
     , free-foil >=0.2.0
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th >=0.2.3
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -108,6 +111,7 @@ executable interpreter-sf
     , free-foil >=0.2.0
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th >=0.2.3
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -129,6 +133,7 @@ executable repl-hm
     , free-foil >=0.2.0
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th >=0.2.3
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -150,6 +155,7 @@ executable repl-sf
     , free-foil >=0.2.0
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th >=0.2.3
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -174,6 +180,7 @@ test-suite doctests
     , free-foil >=0.2.0
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th >=0.2.3
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -182,6 +189,7 @@ test-suite spec
   main-is: Spec.hs
   other-modules:
       FreeFoilTypecheck.HindleyMilner.InferenceSpec
+      FreeFoilTypecheck.HindleyMilner.TypecheckSpec
       FreeFoilTypecheck.SystemF.InterpretSpec
       Paths_free_foil_typecheck
   hs-source-dirs:
@@ -204,5 +212,6 @@ test-suite spec
     , hashable >=1.4.0
     , hspec
     , hspec-discover
+    , kind-generics-th >=0.2.3
     , unordered-containers >=0.2.20
   default-language: Haskell2010

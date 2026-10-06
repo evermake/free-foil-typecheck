@@ -3,3 +3,7 @@ packages:
   - .
 extra-deps:
   - free-foil-0.2.0@sha256:7f99c518a63ff314c7c8ca9776625e22ef56c5170593b52c82fea6f461ac753b,3300
+  - kind-generics-th-0.2.3.3@sha256:fc5f3aee46725e048a0159d73612a5d86c30017cd24ebab764347b65cffbd1d4,1519
+allow-newer: true
+allow-newer-deps:
+  - kind-generics-th
