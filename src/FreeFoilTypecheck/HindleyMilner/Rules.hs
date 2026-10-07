@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -23,49 +24,54 @@ import FreeFoilTypecheck.ScopeCheck (checkClosed)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
+-- >>> import FreeFoilTypecheck.GeneralTypecheck
+-- >>> import FreeFoilTypecheck.HindleyMilner.Syntax (Exp')
 
 instance HMTypingSig FoilTypePattern TypeSig ExpSig where
   inferSigHM = \case
-    ETrueSig -> return (injectUType TBool)
-    EFalseSig -> return (injectUType TBool)
-    ESubSig l r -> do
-      _ <- unifyHM l (injectUType TNat)
-      _ <- unifyHM r (injectUType TNat)
-      return (injectUType TNat)
+    ETrueSig -> return tBool
+    EFalseSig -> return tBool
+    ENatSig _ -> return tNat
     EAddSig l r -> do
-      _ <- unifyHM l (injectUType TNat)
-      _ <- unifyHM r (injectUType TNat)
-      return (injectUType TNat)
-    EIfSig condType thenType elseType -> do
-      _ <- unifyHM condType (injectUType TBool)
-      _ <- unifyHM thenType elseType
+      checkHM l tNat
+      checkHM r tNat
+      return tNat
+    ESubSig l r -> do
+      checkHM l tNat
+      checkHM r tNat
+      return tNat
+    EIsZeroSig arg -> do
+      checkHM arg tNat
+      return tBool
+    EIfSig cond then_ else_ -> do
+      checkHM cond tBool
+      thenType <- then_
+      checkHM else_ thenType
       return thenType
-    EIsZeroSig argType -> do
-      _ <- unifyHM argType (injectUType TNat)
-      return (injectUType TBool)
-    EAppSig funType argType -> do
+    EAppSig fun arg -> do
+      funType <- fun
+      argType <- arg
       retType <- freshHM
-      _ <- unifyHM funType (FreeFoil.Node (L2 (TArrowSig argType retType)))
+      unifyHM funType (TArrow' argType retType)
       return retType
-    ETypedSig ty annotation -> do
+    ETypedSig term annotation -> do
       annotationType <- typeOfAnnotation annotation
-      _ <- unifyHM ty annotationType
+      checkHM term annotationType
       return annotationType
-    ENatSig _ -> do
-      return (injectUType TNat)
-    EForSig fromTy toTy inferBody -> do
-      (binderType, bodyType) <- inferBody Nothing
-      _ <- unifyHM fromTy (injectUType TNat)
-      _ <- unifyHM toTy (injectUType TNat)
-      _ <- unifyHM binderType (injectUType TNat)
-      return bodyType
-    EAbsSig inferBody -> do
-      (paramType, bodyType) <- inferBody Nothing
+    EForSig from to body -> do
+      checkHM from tNat
+      checkHM to tNat
+      body [MonoType tNat]
+    EAbsSig body -> do
+      paramType <- freshHM
+      bodyType <- body [MonoType paramType]
       return (TArrow' paramType bodyType)
-    ELetSig type1 inferBody -> do
-      gtype1 <- generalizeHM type1
-      (_, bodyType) <- inferBody (Just gtype1)
-      return bodyType
+    ELetSig bound body -> do
+      boundType <- generalizeHM bound
+      body [boundType]
+    where
+      tNat = injectUType TNat
+      tBool = injectUType TBool
 
 -- | The type of an annotation. Its unification variables (such as @?a@)
 -- become fresh unification variables of the engine.
@@ -125,6 +131,19 @@ fromUType = \case
 
 instance Show (UType FoilTypePattern TypeSig n) where
   show = show . fromUType
+
+-- | Show a type scheme with @forall@s.
+--
+-- >>> either id showHMType (inferTypeSchemeClosed LevelBased ("let id = λx. x in id" :: Exp'))
+-- "forall x0 . x0 -> x0"
+showHMType :: HMType (UType FoilTypePattern TypeSig) -> String
+showHMType = \case
+  MonoType type_ -> show type_
+  PolyType (TypeScheme binders type_) -> show (foralls binders (fromUType type_))
+  where
+    foralls :: Foil.NameBinderList n l -> Type l -> Type n
+    foralls Foil.NameBinderListEmpty body = body
+    foralls (Foil.NameBinderListCons binder rest) body = TForAll (FoilTPatternVar binder) (foralls rest body)
 
 -- | Infer the type of a closed term with the generic engine.
 --

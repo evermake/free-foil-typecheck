@@ -23,7 +23,7 @@
 -- unification, generalisation, instantiation, and the typing environment.
 --
 -- Unification variables are integers ('MetaVar'), and their bindings form a
--- triangular substitution in an @IntMap@: a binding may mention other
+-- triangular substitution in a 'MetaVarMap': a binding may mention other
 -- variables, and bindings are never composed. 'zonkWith' resolves a type by
 -- following the chains of bindings, as @zonkType@ does in the type checker of
 -- Peyton Jones et al. The sources of these techniques are:
@@ -63,6 +63,59 @@ import Data.List (nub)
 -- | A unification variable (metavariable).
 newtype MetaVar = MetaVar Int
   deriving (Eq, Ord, Show)
+
+-- | The unification variable created after the given one.
+nextMetaVar :: MetaVar -> MetaVar
+nextMetaVar (MetaVar i) = MetaVar (i + 1)
+
+-- | A finite map from unification variables.
+newtype MetaVarMap a = MetaVarMap (IntMap.IntMap a)
+
+emptyMetaVarMap :: MetaVarMap a
+emptyMetaVarMap = MetaVarMap IntMap.empty
+
+fromListMetaVarMap :: [(MetaVar, a)] -> MetaVarMap a
+fromListMetaVarMap xs = MetaVarMap (IntMap.fromList [(i, a) | (MetaVar i, a) <- xs])
+
+lookupMetaVarMap :: MetaVar -> MetaVarMap a -> Maybe a
+lookupMetaVarMap (MetaVar i) (MetaVarMap m) = IntMap.lookup i m
+
+findWithDefaultMetaVarMap :: a -> MetaVar -> MetaVarMap a -> a
+findWithDefaultMetaVarMap def (MetaVar i) (MetaVarMap m) = IntMap.findWithDefault def i m
+
+insertMetaVarMap :: MetaVar -> a -> MetaVarMap a -> MetaVarMap a
+insertMetaVarMap (MetaVar i) a (MetaVarMap m) = MetaVarMap (IntMap.insert i a m)
+
+adjustMetaVarMap :: (a -> a) -> MetaVar -> MetaVarMap a -> MetaVarMap a
+adjustMetaVarMap f (MetaVar i) (MetaVarMap m) = MetaVarMap (IntMap.adjust f i m)
+
+sizeMetaVarMap :: MetaVarMap a -> Int
+sizeMetaVarMap (MetaVarMap m) = IntMap.size m
+
+-- | A finite set of unification variables.
+newtype MetaVarSet = MetaVarSet IntSet.IntSet
+
+fromListMetaVarSet :: [MetaVar] -> MetaVarSet
+fromListMetaVarSet xs = MetaVarSet (IntSet.fromList [i | MetaVar i <- xs])
+
+memberMetaVarSet :: MetaVar -> MetaVarSet -> Bool
+memberMetaVarSet (MetaVar i) (MetaVarSet set) = IntSet.member i set
+
+-- | A level of generalisation: the number of enclosing 'generalizeHM's.
+newtype Level = Level Int
+  deriving (Eq, Ord, Show)
+
+-- | The level outside of any 'generalizeHM'.
+outermostLevel :: Level
+outermostLevel = Level 0
+
+-- | The level inside one more 'generalizeHM'.
+deeperLevel :: Level -> Level
+deeperLevel (Level n) = Level (n + 1)
+
+-- | The level outside of the innermost 'generalizeHM'.
+shallowerLevel :: Level -> Level
+shallowerLevel (Level n) = Level (n - 1)
 
 -- | A signature with a single kind of node, a unification variable.
 -- The engine sums it with the type signature of a language (see 'UType').
@@ -121,8 +174,8 @@ generalize [] type_ = MonoType type_
 generalize xs type_ = withGeneralizedVars Foil.emptyScope [] xs $ \freshNameBinders env ->
   case (Foil.assertExt freshNameBinders, Foil.assertDistinct freshNameBinders) of
     (Foil.Ext, Foil.Distinct) ->
-      let env' = IntMap.fromList [(i, FreeFoil.Var name) | (MetaVar i, name) <- env]
-       in PolyType (TypeScheme freshNameBinders (zonkWith (`IntMap.lookup` env') (Foil.sink type_)))
+      let env' = fromListMetaVarMap [(x, FreeFoil.Var name) | (x, name) <- env]
+       in PolyType (TypeScheme freshNameBinders (zonkWith (`lookupMetaVarMap` env') (Foil.sink type_)))
 
 withGeneralizedVars ::
   (Foil.Distinct n) =>
@@ -173,17 +226,17 @@ canonicalHMType hmType =
 -- The lookup function is given in the current scope, so it is sunk under binders.
 zonkWith ::
   (Bifunctor typeSig, Foil.CoSinkable binder, Foil.Distinct n) =>
-  (Int -> Maybe (UType binder typeSig n)) ->
+  (MetaVar -> Maybe (UType binder typeSig n)) ->
   UType binder typeSig n ->
   UType binder typeSig n
 zonkWith look = \case
-  type_@(toMetaVar -> Just (MetaVar i)) -> maybe type_ (zonkWith look) (look i)
+  type_@(toMetaVar -> Just x) -> maybe type_ (zonkWith look) (look x)
   FreeFoil.Var x -> FreeFoil.Var x
   FreeFoil.Node node -> FreeFoil.Node (bimap (zonkScopedWith look) (zonkWith look) node)
 
 zonkScopedWith ::
   (Bifunctor typeSig, Foil.CoSinkable binder, Foil.Distinct n) =>
-  (Int -> Maybe (UType binder typeSig n)) ->
+  (MetaVar -> Maybe (UType binder typeSig n)) ->
   UScopedType binder typeSig n ->
   UScopedType binder typeSig n
 zonkScopedWith look (FreeFoil.ScopedAST binder body) =
@@ -192,36 +245,64 @@ zonkScopedWith look (FreeFoil.ScopedAST binder body) =
       FreeFoil.ScopedAST binder (zonkWith (fmap Foil.sink . look) body)
 
 -- | Apply a substitution of unification variables to a closed type.
-zonk :: (Bifunctor typeSig, Foil.CoSinkable binder) => IntMap.IntMap (UType binder typeSig Foil.VoidS) -> UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS
-zonk subst = zonkWith (`IntMap.lookup` subst)
+zonk :: (Bifunctor typeSig, Foil.CoSinkable binder) => MetaVarMap (UType binder typeSig Foil.VoidS) -> UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS
+zonk subst = zonkWith (`lookupMetaVarMap` subst)
 
 -- | Unification variables of a type after applying a substitution
 -- (possibly with repetitions).
-freeMetaVars :: (Bifoldable typeSig) => IntMap.IntMap (UType binder typeSig Foil.VoidS) -> UType binder typeSig n -> [Int]
+freeMetaVars :: (Bifoldable typeSig) => MetaVarMap (UType binder typeSig Foil.VoidS) -> UType binder typeSig n -> [MetaVar]
 freeMetaVars subst = \case
-  (toMetaVar -> Just (MetaVar i)) -> case IntMap.lookup i subst of
+  (toMetaVar -> Just x) -> case lookupMetaVarMap x subst of
     Just type_ -> freeMetaVars subst type_
-    Nothing -> [i]
+    Nothing -> [x]
   FreeFoil.Var _ -> []
   FreeFoil.Node node -> bifoldMap (\(FreeFoil.ScopedAST _ body) -> freeMetaVars subst body) (freeMetaVars subst) node
 
-freeMetaVarsHM :: (Bifoldable typeSig) => IntMap.IntMap (UType binder typeSig Foil.VoidS) -> HMType (UType binder typeSig) -> [Int]
+freeMetaVarsHM :: (Bifoldable typeSig) => MetaVarMap (UType binder typeSig Foil.VoidS) -> HMType (UType binder typeSig) -> [MetaVar]
 freeMetaVarsHM subst (MonoType type_) = freeMetaVars subst type_
 freeMetaVarsHM subst (PolyType (TypeScheme _ type_)) = freeMetaVars subst type_
 
 -- * Inference monad
 
+-- | How 'generalizeHM' finds the unification variables to quantify.
+data Generalization
+  = -- | Quantify the variables whose level is deeper than the current one
+    -- (Rémy). This does not look at the typing environment.
+    LevelBased
+  | -- | Quantify the variables that do not occur in the typing environment
+    -- (Damas and Milner). This traverses the whole environment at every @let@.
+    Naive
+  deriving (Eq, Show)
+
 data TypingContext ty n = TypingContext
   { -- | Triangular substitution of unification variables.
-    tcSubst :: IntMap.IntMap (ty Foil.VoidS),
+    tcSubst :: MetaVarMap (ty Foil.VoidS),
     -- | Types of the variables in scope.
     tcTypings :: Foil.NameMap n (HMType ty),
     -- | Next unification variable.
-    tcFreshId :: Int
+    tcFreshId :: MetaVar,
+    -- | Level of each unification variable that is not bound by the substitution.
+    -- Invariant: a variable occurs in the typing environment (after applying
+    -- the substitution) only if its level is at most the current level.
+    tcLevels :: MetaVarMap Level,
+    -- | Current level: the number of enclosing 'generalizeHM's.
+    tcLevel :: Level,
+    tcGeneralization :: Generalization
   }
 
+initialTypingContext :: Generalization -> TypingContext ty Foil.VoidS
+initialTypingContext generalization =
+  TypingContext
+    { tcSubst = emptyMetaVarMap,
+      tcTypings = Foil.emptyNameMap,
+      tcFreshId = MetaVar 0,
+      tcLevels = emptyMetaVarMap,
+      tcLevel = outermostLevel,
+      tcGeneralization = generalization
+    }
+
 emptyTypingContext :: TypingContext ty Foil.VoidS
-emptyTypingContext = TypingContext IntMap.empty Foil.emptyNameMap 0
+emptyTypingContext = initialTypingContext LevelBased
 
 newtype TypeCheck ty n a = TypeCheck {runTypeCheck :: TypingContext ty n -> Either String (a, TypingContext ty n)}
   deriving (Functor)
@@ -263,27 +344,39 @@ enterScope binder types (TypeCheck action)
 
 -- * Interface for typing rules
 
-type Infer typeBinder typeSig = UType typeBinder typeSig Foil.VoidS
+-- | A computation that infers the type of a child term.
+type Infer typeBinder typeSig n =
+  TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 
+-- | A computation that infers the type of a scoped child term (the body of a binder),
+-- given the types of the variables bound by its pattern, in the order of the pattern.
 type ScopedInfer typeBinder typeSig n =
-  Maybe (HMType (UType typeBinder typeSig)) ->
-  TypeCheck (UType typeBinder typeSig) n (Infer typeBinder typeSig, Infer typeBinder typeSig)
+  [HMType (UType typeBinder typeSig)] -> Infer typeBinder typeSig n
 
+-- | Typing rules of a language, one per node of its term signature @sig@.
+--
+-- A rule receives the children of a node as computations, not as their types.
+-- This way a rule decides when (and in which context) each child is inferred.
+-- For example, the rule for @let@ infers the bound term inside 'generalizeHM',
+-- and the rule for @λ@ chooses the type of the bound variable.
 class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (sig :: K.Type -> K.Type -> K.Type) where
   inferSigHM ::
-    sig
-      (ScopedInfer binder typeSig n)
-      (Infer binder typeSig) -> -- expr node
-    TypeCheck (UType binder typeSig) n (Infer binder typeSig) -- typecheck result
+    sig (ScopedInfer binder typeSig n) (Infer binder typeSig n) ->
+    Infer binder typeSig n
 
 -- * Operations for typing rules
 
--- | A fresh unification variable.
+-- | A fresh unification variable (at the current level).
 freshMetaVar :: TypeCheck ty n MetaVar
 freshMetaVar = do
   ctx <- get
-  put ctx {tcFreshId = tcFreshId ctx + 1}
-  return (MetaVar (tcFreshId ctx))
+  let x = tcFreshId ctx
+  put
+    ctx
+      { tcFreshId = nextMetaVar x,
+        tcLevels = insertMetaVarMap x (tcLevel ctx) (tcLevels ctx)
+      }
+  return x
 
 -- | A fresh unification variable as a type.
 freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
@@ -305,30 +398,63 @@ unifyHM typ1 typ2 = do
     (_, _) -> failTypeCheck "cannot unify"
   where
     -- resolve a bound unification variable at the root
-    walk subst type_@(toMetaVar -> Just (MetaVar i)) = maybe type_ (walk subst) (IntMap.lookup i subst)
+    walk subst type_@(toMetaVar -> Just x) = maybe type_ (walk subst) (lookupMetaVarMap x subst)
     walk _ type_ = type_
 
 -- | Bind a unification variable (after the occurs check).
+-- With 'LevelBased' generalisation, the variables of the type
+-- get the level of the bound variable, if theirs is deeper.
 bindMetaVar :: (Bifoldable typeSig) => MetaVar -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
-bindMetaVar (MetaVar x) type_ = do
+bindMetaVar x type_ = do
   ctx <- get
-  if x `elem` freeMetaVars (tcSubst ctx) type_
+  let vars = freeMetaVars (tcSubst ctx) type_
+      levels = case (tcGeneralization ctx, lookupMetaVarMap x (tcLevels ctx)) of
+        (LevelBased, Just level) -> foldr (adjustMetaVarMap (min level)) (tcLevels ctx) vars
+        _ -> tcLevels ctx
+  if x `elem` vars
     then failTypeCheck "occurs check failed"
-    else put ctx {tcSubst = IntMap.insert x type_ (tcSubst ctx)}
+    else put ctx {tcSubst = insertMetaVarMap x type_ (tcSubst ctx), tcLevels = levels}
 
--- | Generalise a type over the unification variables that do not occur
--- in the typing environment.
+-- | Infer the type of a child term one level deeper, and generalise it over
+-- the unification variables that cannot occur in the typing environment
+-- (see 'Generalization').
 generalizeHM ::
   (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
-  UType binder typeSig Foil.VoidS ->
+  Infer binder typeSig n ->
   TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig))
-generalizeHM type_ = do
+generalizeHM infer = do
+  type_ <- enterLevel infer
   ctx <- get
   let subst = tcSubst ctx
       type' = zonk subst type_
-      envVars = IntSet.fromList (concatMap (freeMetaVarsHM subst) (F.toList (tcTypings ctx)))
-      vars = [x | x@(MetaVar i) <- metaVarsOf type', not (IntSet.member i envVars)]
+      candidates = metaVarsOf type'
+      vars = case tcGeneralization ctx of
+        LevelBased ->
+          [x | x <- candidates, findWithDefaultMetaVarMap outermostLevel x (tcLevels ctx) > tcLevel ctx]
+        Naive ->
+          let envVars = fromListMetaVarSet (concatMap (freeMetaVarsHM subst) (F.toList (tcTypings ctx)))
+           in [x | x <- candidates, not (memberMetaVarSet x envVars)]
   return (generalize vars type')
+
+-- | Run a computation one level deeper.
+enterLevel :: TypeCheck ty n a -> TypeCheck ty n a
+enterLevel action = do
+  ctx <- get
+  put ctx {tcLevel = deeperLevel (tcLevel ctx)}
+  x <- action
+  ctx' <- get
+  put ctx' {tcLevel = shallowerLevel (tcLevel ctx')}
+  return x
+
+-- | Infer the type of a child term and unify it with the expected type.
+checkHM ::
+  (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) =>
+  Infer binder typeSig n ->
+  UType binder typeSig Foil.VoidS ->
+  TypeCheck (UType binder typeSig) n ()
+checkHM infer expected = do
+  type_ <- infer
+  unifyHM type_ expected
 
 -- | Instantiate a type scheme with fresh unification variables.
 instantiateHM :: (Bifunctor typeSig, Foil.CoSinkable binder) => HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
@@ -346,37 +472,39 @@ zonkHM type_ = do
 -- * Generic traversal
 
 inferTypeNewClosed ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig) =>
   FreeFoil.AST binder sig Foil.VoidS ->
   TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = reconstructType expr >>= zonkHM
 
+-- | Infer the principal type scheme of a closed term.
+inferTypeSchemeClosed ::
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig, Bifoldable typeSig) =>
+  Generalization ->
+  FreeFoil.AST binder sig Foil.VoidS ->
+  Either String (HMType (UType typeBinder typeSig))
+inferTypeSchemeClosed generalization expr =
+  fst <$> runTypeCheck (generalizeHM (reconstructType expr)) (initialTypingContext generalization)
+
+-- | Infer the type of a term: instantiate the type of a variable,
+-- or apply the typing rule of a node to its (suspended) children.
 reconstructType ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.AST binder sig n ->
-  TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
+  Infer typeBinder typeSig n
 reconstructType = \case
   FreeFoil.Var x -> do
     ctx <- get
     instantiateHM (Foil.lookupName x (tcTypings ctx))
-  FreeFoil.Node node -> do
-    node' <- bitraverse reconstructTypeScoped' reconstructType node
-    inferSigHM node'
+  FreeFoil.Node node ->
+    inferSigHM (bimap reconstructTypeScoped reconstructType node)
 
-reconstructTypeScoped' ::
-  (Foil.CoSinkable typeBinder, Bitraversable sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
+reconstructTypeScoped ::
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
   FreeFoil.ScopedAST binder sig n ->
-  TypeCheck (UType typeBinder typeSig) n (ScopedInfer typeBinder typeSig n)
-reconstructTypeScoped' (FreeFoil.ScopedAST binder body) =
-  return $ \case
-    Nothing -> do
-      type_ <- freshHM
-      bodyType <- enterScope binder [MonoType type_] (reconstructType body)
-      return (type_, bodyType)
-    Just gtype -> do
-      bodyType <- enterScope binder [gtype] (reconstructType body)
-      type_ <- instantiateHM gtype
-      return (type_, bodyType)
+  ScopedInfer typeBinder typeSig n
+reconstructTypeScoped (FreeFoil.ScopedAST binder body) types =
+  enterScope binder types (reconstructType body)
 
 -- * Comparing types
 
