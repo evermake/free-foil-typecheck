@@ -61,17 +61,21 @@ instance HMTypingSig FoilTypePattern TypeSig ExpSig where
     EForSig from to body -> do
       checkHM from tNat
       checkHM to tNat
-      body [MonoType tNat]
+      inferScopedHM body tNat
     EAbsSig body -> do
       paramType <- freshHM
-      bodyType <- body [MonoType paramType]
+      bodyType <- inferScopedHM body paramType
       return (TArrow' paramType bodyType)
     ELetSig bound body -> do
       boundType <- generalizeHM bound
-      body [boundType]
+      inferBodyHM body [boundType]
     where
       tNat = injectUType TNat
       tBool = injectUType TBool
+
+-- | A pattern of the HM language is a variable, which gets the whole type.
+instance HMTypingPattern FoilTypePattern TypeSig FoilPattern where
+  checkPatternHM (FoilPatternVar _) type_ = return [type_]
 
 -- | The type of an annotation. Its unification variables (such as @?a@)
 -- become fresh unification variables of the engine.

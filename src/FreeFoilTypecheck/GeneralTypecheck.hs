@@ -18,8 +18,9 @@
 -- | A generic engine for Hindley–Milner type inference over free-foil syntax.
 --
 -- The engine knows nothing about a particular language. A language provides
--- the signature of its terms and of its types, and one typing rule per node
--- (an instance of 'HMTypingSig'). The engine provides unification variables,
+-- the signature of its terms and of its types, one typing rule per node
+-- (an instance of 'HMTypingSig'), and the typing rules of its patterns (an
+-- instance of 'HMTypingPattern'). The engine provides unification variables,
 -- unification, generalisation, instantiation, and the typing environment.
 --
 -- Unification variables are integers ('MetaVar'), and their bindings form a
@@ -348,10 +349,18 @@ enterScope binder types (TypeCheck action)
 type Infer typeBinder typeSig n =
   TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 
--- | A computation that infers the type of a scoped child term (the body of a binder),
--- given the types of the variables bound by its pattern, in the order of the pattern.
-type ScopedInfer typeBinder typeSig n =
-  [HMType (UType typeBinder typeSig)] -> Infer typeBinder typeSig n
+-- | A scoped child term (a pattern and the body in its scope), as a typing
+-- rule sees it.
+data ScopedInfer typeBinder typeSig n = ScopedInfer
+  { -- | Check the pattern against a type (see 'HMTypingPattern'), and return
+    -- the types of the variables it binds, in the order of the pattern.
+    checkBinderHM ::
+      UType typeBinder typeSig Foil.VoidS ->
+      TypeCheck (UType typeBinder typeSig) n [UType typeBinder typeSig Foil.VoidS],
+    -- | Infer the type of the body, given the types of the variables bound
+    -- by the pattern, in the order of the pattern.
+    inferBodyHM :: [HMType (UType typeBinder typeSig)] -> Infer typeBinder typeSig n
+  }
 
 -- | Typing rules of a language, one per node of its term signature @sig@.
 --
@@ -363,6 +372,23 @@ class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K
   inferSigHM ::
     sig (ScopedInfer binder typeSig n) (Infer binder typeSig n) ->
     Infer binder typeSig n
+
+-- | Typing rules of the patterns of a language (the binders of its terms).
+--
+-- @checkPatternHM pattern type_@ checks that @pattern@ matches values of type
+-- @type_@, and returns the types of the variables bound by @pattern@, in the
+-- order of the pattern ('Foil.nameBinderListOf'). For example, a rule for a
+-- pair pattern @(p, q)@ unifies @type_@ with a product of two fresh types and
+-- checks @p@ and @q@ against them. This follows the judgement of Mini-ML that
+-- builds the local environment of a pattern (Dominique Clément, Joëlle
+-- Despeyroux, Thierry Despeyroux and Gilles Kahn. /A simple applicative
+-- language: Mini-ML/. LFP 1986. <https://doi.org/10.1145/319838.319847>,
+-- section 2.5.3).
+class HMTypingPattern (typeBinder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (binder :: Foil.S -> Foil.S -> K.Type) where
+  checkPatternHM ::
+    binder n l ->
+    UType typeBinder typeSig Foil.VoidS ->
+    TypeCheck (UType typeBinder typeSig) m [UType typeBinder typeSig Foil.VoidS]
 
 -- * Operations for typing rules
 
@@ -436,6 +462,18 @@ generalizeHM infer = do
            in [x | x <- candidates, not (memberMetaVarSet x envVars)]
   return (generalize vars type')
 
+-- | Like 'generalizeHM', for a computation that returns several types, such
+-- as the types of the variables of a pattern. Each type is generalised
+-- separately.
+generalizeEachHM ::
+  (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
+  TypeCheck (UType binder typeSig) n [UType binder typeSig Foil.VoidS] ->
+  TypeCheck (UType binder typeSig) n [HMType (UType binder typeSig)]
+generalizeEachHM infer = do
+  types <- enterLevel infer
+  -- @generalizeHM (return t)@ generalises @t@ at the current level
+  mapM (generalizeHM . return) types
+
 -- | Run a computation one level deeper.
 enterLevel :: TypeCheck ty n a -> TypeCheck ty n a
 enterLevel action = do
@@ -456,6 +494,17 @@ checkHM infer expected = do
   type_ <- infer
   unifyHM type_ expected
 
+-- | Check the pattern of a scoped child term against a type, and infer the
+-- type of the body with the (monomorphic) types of the variables of the
+-- pattern. This is the rule for the binder of @λ@, for example.
+inferScopedHM ::
+  ScopedInfer binder typeSig n ->
+  UType binder typeSig Foil.VoidS ->
+  Infer binder typeSig n
+inferScopedHM scoped type_ = do
+  types <- checkBinderHM scoped type_
+  inferBodyHM scoped (map MonoType types)
+
 -- | Instantiate a type scheme with fresh unification variables.
 instantiateHM :: (Bifunctor typeSig, Foil.CoSinkable binder) => HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 instantiateHM (MonoType type_) = return type_
@@ -472,14 +521,14 @@ zonkHM type_ = do
 -- * Generic traversal
 
 inferTypeNewClosed ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder, Bifunctor typeSig) =>
   FreeFoil.AST binder sig Foil.VoidS ->
   TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = reconstructType expr >>= zonkHM
 
 -- | Infer the principal type scheme of a closed term.
 inferTypeSchemeClosed ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, Bifunctor typeSig, Bifoldable typeSig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder, Bifunctor typeSig, Bifoldable typeSig) =>
   Generalization ->
   FreeFoil.AST binder sig Foil.VoidS ->
   Either String (HMType (UType typeBinder typeSig))
@@ -489,7 +538,7 @@ inferTypeSchemeClosed generalization expr =
 -- | Infer the type of a term: instantiate the type of a variable,
 -- or apply the typing rule of a node to its (suspended) children.
 reconstructType ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder) =>
   FreeFoil.AST binder sig n ->
   Infer typeBinder typeSig n
 reconstructType = \case
@@ -500,11 +549,14 @@ reconstructType = \case
     inferSigHM (bimap reconstructTypeScoped reconstructType node)
 
 reconstructTypeScoped ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig) =>
+  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder) =>
   FreeFoil.ScopedAST binder sig n ->
   ScopedInfer typeBinder typeSig n
-reconstructTypeScoped (FreeFoil.ScopedAST binder body) types =
-  enterScope binder types (reconstructType body)
+reconstructTypeScoped (FreeFoil.ScopedAST binder body) =
+  ScopedInfer
+    { checkBinderHM = checkPatternHM binder,
+      inferBodyHM = \types -> enterScope binder types (reconstructType body)
+    }
 
 -- * Comparing types
 
