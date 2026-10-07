@@ -466,14 +466,14 @@ generalizeHM infer = do
            in [x | x <- candidates, not (memberMetaVarSet x envVars)]
   return (generalize vars type')
 
--- | Like 'generalizeHM', for a computation that returns several types, such
--- as the types of the variables of a pattern. Each type is generalised
--- separately.
-generalizeEachHM ::
+-- | Like 'generalizeHM', for the types of the variables of a pattern, as
+-- returned by a computation such as @bound >>= checkBinderHM body@. Each type
+-- is generalised separately.
+generalizePatternHM ::
   (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
   TypeCheck (UType binder typeSig) n [UType binder typeSig Foil.VoidS] ->
   TypeCheck (UType binder typeSig) n [HMType (UType binder typeSig)]
-generalizeEachHM infer = do
+generalizePatternHM infer = do
   types <- enterLevel infer
   -- @generalizeHM (return t)@ generalises @t@ at the current level
   mapM (generalizeHM . return) types
