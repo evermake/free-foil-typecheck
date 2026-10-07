@@ -43,7 +43,6 @@ library
       FreeFoilTypecheck.Orphans
       FreeFoilTypecheck.ScopeCheck
       FreeFoilTypecheck.SystemF.Eval
-      FreeFoilTypecheck.SystemF.FreeFoilExt
       FreeFoilTypecheck.SystemF.Interpret
       FreeFoilTypecheck.SystemF.Parser.Abs
       FreeFoilTypecheck.SystemF.Parser.Lex

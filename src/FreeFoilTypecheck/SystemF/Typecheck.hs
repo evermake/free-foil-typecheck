@@ -15,15 +15,16 @@
 
 module FreeFoilTypecheck.SystemF.Typecheck where
 
+import Control.Monad.Foil (nameMapToScope)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil.Relative as Foil
+import Control.Monad.Free.Foil (unsinkAST)
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifunctor (Bifunctor)
 import Data.Bitraversable (Bitraversable)
 import Data.ZipMatchK (ZipMatchK)
 import Debug.Trace (trace)
 import FreeFoilTypecheck.SystemF.Syntax
-import FreeFoilTypecheck.SystemF.FreeFoilExt
 
 -- $setup
 -- >>> :set -XOverloadedStrings

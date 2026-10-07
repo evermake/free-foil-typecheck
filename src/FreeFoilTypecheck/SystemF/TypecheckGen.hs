@@ -12,13 +12,13 @@
 module FreeFoilTypecheck.SystemF.TypecheckGen where
 
 import Control.Monad (unless)
+import Control.Monad.Foil (nameMapToScope)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil.Relative as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bitraversable
 import Data.Kind (Type)
 import Data.ZipMatchK (ZipMatchK)
-import FreeFoilTypecheck.SystemF.FreeFoilExt
 
 --------------------------------------------------------------------------------
 

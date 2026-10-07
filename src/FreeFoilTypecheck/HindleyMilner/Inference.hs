@@ -21,7 +21,6 @@ import Data.Bifunctor (Bifunctor (bimap))
 import qualified Data.Foldable as F
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.Hashable
-import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -36,9 +35,6 @@ import FreeFoilTypecheck.HindleyMilner.Syntax
 --------------------------------------------------------------------------------
 
 deriving instance (Show a) => Show (Foil.NameMap n a)
-
-popNameBinder :: Foil.NameBinder n l -> Foil.NameMap l a -> Foil.NameMap n a
-popNameBinder name (Foil.NameMap m) = Foil.NameMap (IntMap.delete (Foil.nameId (Foil.nameOf name)) m)
 
 --------------------------------------------------------------------------------
 
@@ -178,7 +174,7 @@ enterScope binder type_ action = do
   let ctx' = ctx {tcEnv = TypingEnv (Foil.addNameBinder binder type_ nameMap)}
   (x, ctx'') <- fromEither $ runTI action ctx'
   let (TypingEnv nameMap'') = tcEnv ctx''
-  put ctx'' {tcEnv = TypingEnv (popNameBinder binder nameMap'')}
+  put ctx'' {tcEnv = TypingEnv (Foil.popNameBinder binder nameMap'')}
   return x
 
 enterLevel :: TypeInferencer n a -> TypeInferencer n a
