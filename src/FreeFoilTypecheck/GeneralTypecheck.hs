@@ -350,7 +350,9 @@ type Infer typeBinder typeSig n =
   TypeCheck (UType typeBinder typeSig) n (UType typeBinder typeSig Foil.VoidS)
 
 -- | A scoped child term (a pattern and the body in its scope), as a typing
--- rule sees it.
+-- rule sees it. As with @CheckInfer@ in the System F engine
+-- ("FreeFoilTypecheck.SystemF.TypecheckGen"), a rule receives the child as a
+-- record of operations.
 data ScopedInfer typeBinder typeSig n = ScopedInfer
   { -- | Check the pattern against a type (see 'HMTypingPattern'), and return
     -- the types of the variables it binds, in the order of the pattern.
@@ -384,6 +386,12 @@ class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K
 -- Despeyroux, Thierry Despeyroux and Gilles Kahn. /A simple applicative
 -- language: Mini-ML/. LFP 1986. <https://doi.org/10.1145/319838.319847>,
 -- section 2.5.3).
+--
+-- The class plays the role of @TypedPattern@ by Diana Tomilovskaia in the
+-- System F engine ("FreeFoilTypecheck.SystemF.TypecheckGen"), which gives the
+-- types of the variables of a pattern from the type of the pattern. Here the
+-- check runs in 'TypeCheck', so it can unify types and reject a pattern that
+-- does not match.
 class HMTypingPattern (typeBinder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K.Type -> K.Type) (binder :: Foil.S -> Foil.S -> K.Type) where
   checkPatternHM ::
     binder n l ->
