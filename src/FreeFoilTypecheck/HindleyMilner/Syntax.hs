@@ -22,7 +22,7 @@ import Data.Map (Map)
 import qualified Data.Kind as K
 import qualified Data.Map as Map
 import Data.String (IsString (..))
-import Data.ZipMatchK (ZipMatchK (..), zipMatchViaChooseLeft)
+import Data.ZipMatchK (ZipMatchK (..), zipMatchViaEq)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 import Generics.Kind.TH (deriveGenericK)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
@@ -48,9 +48,11 @@ deriveBifunctor ''ExpSig
 deriveBifoldable ''ExpSig
 deriveBitraversable ''ExpSig
 
--- | Matching two expressions ignores their type annotations.
+-- | Matching two expressions compares their type annotations syntactically,
+-- so annotations that differ only in the names of bound type variables
+-- do not match.
 instance ZipMatchK Raw.Type where
-  zipMatchWithK = zipMatchViaChooseLeft
+  zipMatchWithK = zipMatchViaEq
 
 deriveZipMatchK ''ExpSig
 
@@ -84,9 +86,9 @@ deriveBifunctor ''TypeSig
 deriveBifoldable ''TypeSig
 deriveBitraversable ''TypeSig
 
--- | Matching two types ignores the names of unification variables.
+-- | Matching two types compares the names of unification variables.
 instance ZipMatchK Raw.UVarIdent where
-  zipMatchWithK = zipMatchViaChooseLeft
+  zipMatchWithK = zipMatchViaEq
 
 deriveZipMatchK ''TypeSig
 
