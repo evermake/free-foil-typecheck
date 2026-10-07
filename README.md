@@ -65,14 +65,16 @@ ghci> either id showHMType (inferMiniML LevelBased "letrec map = λf. λl. case 
 
 (`:m` is needed because both `HindleyMilner/Rules.hs` and `MiniML/Rules.hs` define `showHMType`.) The test programs are in `test/FreeFoilTypecheck/MiniML/files/`. Each well-typed program has its expected type in a `*.expected.ml` file.
 
-The tests of the generic engine run every Hindley–Milner and every MiniML test program in both generalisation modes (`GeneralTypecheckSpec` and `MiniML/RulesSpec`). Differential tests check that the generic engine with levels, the generic engine with naive generalisation and the language-specific inference agree on every Hindley–Milner test program and on random Hindley–Milner terms. For MiniML, which has no language-specific inference, they check that the two generalisation modes agree on random terms. To run only the MiniML tests or only the differential tests:
+The tests of the generic engine run every Hindley–Milner and every MiniML test program in both generalisation modes (`GeneralTypecheckSpec` and `MiniML/RulesSpec`). Differential tests check that the generic engine with levels, the generic engine with naive generalisation, the language-specific inference and the specialised engine (see below) agree on every Hindley–Milner test program and on random Hindley–Milner terms. For MiniML, which has no language-specific inference, they check that the two generalisation modes agree on random terms. To run only the MiniML tests or only the differential tests:
 
 ```sh
 stack test free-foil-typecheck:spec --test-arguments='--match MiniML'
 stack test free-foil-typecheck:spec --test-arguments='--match Differential'
 ```
 
-The benchmark `generalization` (`bench/Main.hs`) times the three Hindley–Milner engines with [tasty-bench](https://hackage.haskell.org/package/tasty-bench) on programs with many nested `let`s (three families of programs, `nested-let`, `wide-env` and `let-chain`, with 160 to 1280 `let`s). It reports the mean time of each engine with twice the standard deviation, and the times of the other two engines relative to the generic engine with levels on the same program (e.g. `5.54x`). Run it with `stack bench`, or choose a family with a pattern and save the results as CSV:
+`src/FreeFoilTypecheck/HindleyMilner/SpecializedInference.hs` is the generic engine with levels, specialised by hand to the Hindley–Milner language: the same algorithm, on a first-order type of its own. It is a baseline for the cost of genericity, since the language-specific inference (the original implementation) lacks several optimisations of the generic engine.
+
+The benchmark `generalization` (`bench/Main.hs`) times the four Hindley–Milner engines with [tasty-bench](https://hackage.haskell.org/package/tasty-bench) on programs with many nested `let`s (three families of programs, `nested-let`, `wide-env` and `let-chain`, with 160 to 1280 `let`s). It reports the mean time of each engine with twice the standard deviation, and the times of the other three engines relative to the generic engine with levels on the same program (e.g. `5.54x`). Run it with `stack bench`, or choose a family with a pattern and save the results as CSV:
 
 ```sh
 stack bench free-foil-typecheck:bench:generalization --benchmark-arguments='-p nested-let --csv bench.csv'
