@@ -40,6 +40,7 @@ library
       FreeFoilTypecheck.HindleyMilner.Parser.Par
       FreeFoilTypecheck.HindleyMilner.Parser.Print
       FreeFoilTypecheck.HindleyMilner.Rules
+      FreeFoilTypecheck.HindleyMilner.SpecializedInference
       FreeFoilTypecheck.HindleyMilner.Syntax
       FreeFoilTypecheck.MiniML.FreeFoilConfig
       FreeFoilTypecheck.MiniML.Parser.Abs
