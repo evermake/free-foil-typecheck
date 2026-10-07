@@ -9,6 +9,7 @@ extra-source-files:
   - README.md
   - grammar/hindley-milner.cf
   - grammar/system-f.cf
+  - grammar/miniml.cf
 
 custom-setup:
   dependencies:
@@ -44,6 +45,9 @@ library:
         - FreeFoilTypecheck.HindleyMilner.Parser.Test
         - FreeFoilTypecheck.HindleyMilner.Parser.ErrM
         - FreeFoilTypecheck.HindleyMilner.Parser.Skel
+        - FreeFoilTypecheck.MiniML.Parser.Test
+        - FreeFoilTypecheck.MiniML.Parser.ErrM
+        - FreeFoilTypecheck.MiniML.Parser.Skel
 
     - condition: false
       other-modules:

@@ -52,6 +52,15 @@ main =
                 , "happy Par.y"
                 , "true"
                 , "cd ../../../.."
+                ] <>
+                [ "cp grammar/miniml.cf grammar/Parser.cf"  -- Workaround to customize generated package name
+                , "bnfc --haskell -d -p FreeFoilTypecheck.MiniML --generic -o src grammar/Parser.cf"
+                , "rm grammar/Parser.cf"
+                , "cd src/FreeFoilTypecheck/MiniML/Parser"
+                , "alex Lex.x"
+                , "happy Par.y"
+                , "true"
+                , "cd ../../../.."
                 ]
 
             fullCommand = [fmt|bash -c ' {command} '|]
