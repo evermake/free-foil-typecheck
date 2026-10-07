@@ -1,0 +1,81 @@
+-- MiniML: a small ML with patterns, pairs, sums, lists and recursion.
+-- This is the second language for the generic engine (see FreeFoilTypecheck.MiniML.Rules).
+--
+-- Its name, its core (λ, let, letrec, if and pairs) and the patterns of λ, let
+-- and letrec follow Mini-ML of Clément, Despeyroux, Despeyroux and Kahn,
+-- "A simple applicative language: Mini-ML", LFP 1986,
+-- https://doi.org/10.1145/319838.319847.
+-- Sums, lists, fix and type annotations are the simple extensions of the typed
+-- λ-calculus in Pierce, "Types and Programming Languages", 2002, chapter 11,
+-- and iszero comes from its chapter 3. Patterns of sums and lists, the
+-- wildcard and case with a list of branches are as in ML, with the branches
+-- in braces. The grammar follows the conventions of hindley-milner.cf.
+
+-- Patterns.
+-- The same patterns bind variables in case branches, λ, let, letrec and fix,
+-- and they nest arbitrarily. A pattern must not bind a variable twice, as in
+-- Mini-ML. Patterns of λ, let, letrec and fix may be refutable (such as inl x):
+-- they are typed as in a case branch, and MiniML has no evaluator.
+
+PatternWildcard. Pattern2 ::= "_" ;
+PatternVar.      Pattern2 ::= Ident ;
+PatternNil.      Pattern2 ::= "[" "]" ;
+PatternPair.     Pattern2 ::= "(" Pattern "," Pattern ")" ;
+PatternInl.      Pattern1 ::= "inl" Pattern2 ;
+PatternInr.      Pattern1 ::= "inr" Pattern2 ;
+PatternCons.     Pattern  ::= Pattern1 "::" Pattern ;
+
+coercions Pattern 2 ;
+
+-- Expressions.
+-- The braces around the branches of case delimit them, so a case nested in a
+-- branch needs no parentheses.
+
+EVar.      Exp6 ::= Ident ;
+ETrue.     Exp6 ::= "true" ;
+EFalse.    Exp6 ::= "false" ;
+ENat.      Exp6 ::= Integer ;
+ENil.      Exp6 ::= "[" "]" ;
+EPair.     Exp6 ::= "(" Exp1 "," Exp1 ")" ;
+EApp.      Exp5 ::= Exp5 Exp6 ;
+EFst.      Exp5 ::= "fst" Exp6 ;
+ESnd.      Exp5 ::= "snd" Exp6 ;
+EInl.      Exp5 ::= "inl" Exp6 ;
+EInr.      Exp5 ::= "inr" Exp6 ;
+EIsZero.   Exp5 ::= "iszero" Exp6 ;
+EAdd.      Exp4 ::= Exp4 "+" Exp5 ;
+ESub.      Exp4 ::= Exp4 "-" Exp5 ;
+ECons.     Exp3 ::= Exp4 "::" Exp3 ;
+EIf.       Exp1 ::= "if" Exp1 "then" Exp1 "else" Exp1 ;
+ELet.      Exp1 ::= "let" Pattern "=" Exp1 "in" ScopedExp ;
+ELetRec.   Exp1 ::= "letrec" Pattern "=" ScopedExp "in" ScopedExp ;
+EAbs.      Exp1 ::= "λ" Pattern "." ScopedExp ;
+EFix.      Exp1 ::= "fix" Pattern "." ScopedExp ;
+ECase.     Exp1 ::= "case" Exp1 "of" "{" [Branch] "}" ;
+ETyped.    Exp  ::= Exp1 ":" Type ;
+
+coercions Exp 6 ;
+
+Branch. Branch ::= Pattern "->" ScopedExp ;
+separator nonempty Branch "|" ;
+
+ScopedExp. ScopedExp ::= Exp1 ;
+
+-- Types.
+
+token UVarIdent ('?' letter (letter | digit | '_')*) ;
+TPatternVar. TypePattern ::= Ident ;
+
+TUVar.   Type5 ::= UVarIdent ;
+TNat.    Type5 ::= "Nat" ;
+TBool.   Type5 ::= "Bool" ;
+TVar.    Type5 ::= Ident ;
+TList.   Type4 ::= "List" Type5 ;
+TProd.   Type3 ::= Type4 "*" Type3 ;
+TSum.    Type2 ::= Type3 "+" Type2 ;
+TArrow.  Type1 ::= Type2 "->" Type1 ;
+TForAll. Type  ::= "forall" TypePattern "." ScopedType ;
+
+coercions Type 5 ;
+
+ScopedType. ScopedType ::= Type1 ;

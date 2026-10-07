@@ -16,6 +16,7 @@ extra-source-files:
     README.md
     grammar/hindley-milner.cf
     grammar/system-f.cf
+    grammar/miniml.cf
 
 source-repository head
   type: git
@@ -40,6 +41,13 @@ library
       FreeFoilTypecheck.HindleyMilner.Parser.Print
       FreeFoilTypecheck.HindleyMilner.Rules
       FreeFoilTypecheck.HindleyMilner.Syntax
+      FreeFoilTypecheck.MiniML.FreeFoilConfig
+      FreeFoilTypecheck.MiniML.Parser.Abs
+      FreeFoilTypecheck.MiniML.Parser.Lex
+      FreeFoilTypecheck.MiniML.Parser.Par
+      FreeFoilTypecheck.MiniML.Parser.Print
+      FreeFoilTypecheck.MiniML.Rules
+      FreeFoilTypecheck.MiniML.Syntax
       FreeFoilTypecheck.Orphans
       FreeFoilTypecheck.ScopeCheck
       FreeFoilTypecheck.SystemF.Eval
@@ -195,6 +203,7 @@ test-suite spec
       FreeFoilTypecheck.AlphaEquivSpec
       FreeFoilTypecheck.HindleyMilner.GeneralTypecheckSpec
       FreeFoilTypecheck.HindleyMilner.InferenceSpec
+      FreeFoilTypecheck.MiniML.RulesSpec
       FreeFoilTypecheck.SystemF.InterpretSpec
       Paths_free_foil_typecheck
   hs-source-dirs:

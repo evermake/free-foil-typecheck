@@ -1,0 +1,1 @@
+(Bool * Nat) * (Nat * Bool)
