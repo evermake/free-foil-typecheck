@@ -8,11 +8,11 @@ import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Control.Monad (forM_)
 import Data.Either (isLeft)
-import qualified Data.IntMap as IntMap
 import Data.List (isSuffixOf, sort)
 import FreeFoilTypecheck.GeneralTypecheck
   ( Generalization (..),
     HMType (..),
+    MetaVar (..),
     TypeCheck (..),
     TypingContext (..),
     UType,
@@ -21,6 +21,7 @@ import FreeFoilTypecheck.GeneralTypecheck
     equivUpToRenaming,
     inferTypeNewClosed,
     inferTypeSchemeClosed,
+    sizeMetaVarMap,
   )
 import FreeFoilTypecheck.HindleyMilner.InferenceSpec (testFilesInDir)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
@@ -52,8 +53,9 @@ spec = parallel $ do
         let expr = toExpClosed (either error id (pExp (myLexer (nestedLets n))))
         case runTypeCheck (inferHM expr) emptyTypingContext of
           Left err -> expectationFailure err
-          Right (_type, ctx) ->
-            IntMap.size (tcSubst ctx) `shouldSatisfy` (<= tcFreshId ctx)
+          Right (_type, ctx) -> do
+            let MetaVar created = tcFreshId ctx
+            sizeMetaVarMap (tcSubst ctx) `shouldSatisfy` (<= created)
 
 inferHM :: Exp' -> TypeCheck (UType FoilTypePattern TypeSig) Foil.VoidS (UType FoilTypePattern TypeSig Foil.VoidS)
 inferHM = inferTypeNewClosed
