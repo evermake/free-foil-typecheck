@@ -21,6 +21,25 @@
 -- the signature of its terms and of its types, and one typing rule per node
 -- (an instance of 'HMTypingSig'). The engine provides unification variables,
 -- unification, generalisation, instantiation, and the typing environment.
+--
+-- Unification variables are integers ('MetaVar'), and their bindings form a
+-- triangular substitution in an @IntMap@: a binding may mention other
+-- variables, and bindings are never composed. 'zonkWith' resolves a type by
+-- following the chains of bindings, as @zonkType@ does in the type checker of
+-- Peyton Jones et al. The sources of these techniques are:
+--
+-- * Simon Peyton Jones, Dimitrios Vytiniotis, Stephanie Weirich and Mark
+--   Shields. /Practical type inference for arbitrary-rank types/. Journal of
+--   Functional Programming 17(1), 2007.
+--   <https://doi.org/10.1017/S0956796806006034>. Its appendix defines
+--   @zonkType@ over mutable meta type variables.
+-- * William E. Byrd. /Relational programming in miniKanren: techniques,
+--   applications, and implementations/. PhD thesis, Indiana University, 2009.
+--   <https://scholarworks.iu.edu/dspace/items/450e1b65-70da-4a38-8e73-c182818de110>.
+--   Triangular substitutions and the @walk@ lookup.
+-- * Wren Romano. The Haskell library unification-fd, module
+--   @Control.Unification.IntVar@: integer unification variables bound in an
+--   @IntMap@. <https://hackage.haskell.org/package/unification-fd>
 module FreeFoilTypecheck.GeneralTypecheck where
 
 import Control.Monad (ap)
@@ -149,7 +168,8 @@ canonicalHMType hmType =
 
 -- * Substitution
 
--- | Apply a (triangular) substitution of unification variables.
+-- | Apply a triangular substitution of unification variables, following the
+-- chains of bindings (zonking, see the module header).
 -- The lookup function is given in the current scope, so it is sunk under binders.
 zonkWith ::
   (Bifunctor typeSig, Foil.CoSinkable binder, Foil.Distinct n) =>
