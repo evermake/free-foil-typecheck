@@ -1,0 +1,1 @@
+Nat + Bool -> Bool + Nat
