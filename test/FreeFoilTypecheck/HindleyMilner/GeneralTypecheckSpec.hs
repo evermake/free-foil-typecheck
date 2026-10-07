@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Runs the generic engine ('FreeFoilTypecheck.HindleyMilner.GeneralTypecheck')
+-- | Runs the generic engine ('FreeFoilTypecheck.GeneralTypecheck')
 -- on the same test programs as 'FreeFoilTypecheck.HindleyMilner.InferenceSpec'.
 module FreeFoilTypecheck.HindleyMilner.GeneralTypecheckSpec where
 
@@ -8,23 +8,21 @@ import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Control.Monad (forM_)
 import Data.Either (isLeft)
-import Data.List (isSuffixOf, nub, sort)
-import FreeFoilTypecheck.HindleyMilner.GeneralTypecheck
-  ( TypeCheck (..),
+import qualified Data.IntMap as IntMap
+import Data.List (isSuffixOf, sort)
+import FreeFoilTypecheck.GeneralTypecheck
+  ( HMType (..),
+    TypeCheck (..),
     TypingContext (..),
     UType,
-    allUVarsOfType,
-    alphaEquiv,
     emptyTypingContext,
-    equivHMType,
-    generalize,
+    equivUpToRenaming,
     inferTypeNewClosed,
-    injectUType',
-    testInferTypeNewClosed,
   )
 import FreeFoilTypecheck.HindleyMilner.InferenceSpec (testFilesInDir)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
+import FreeFoilTypecheck.HindleyMilner.Rules (fromTypeClosed, testInferTypeNewClosed)
 import FreeFoilTypecheck.HindleyMilner.Syntax
 import System.FilePath (replaceExtension)
 import Test.Hspec
@@ -50,10 +48,8 @@ spec = parallel $ do
         let expr = toExpClosed (either error id (pExp (myLexer (nestedLets n))))
         case runTypeCheck (inferHM expr) emptyTypingContext of
           Left err -> expectationFailure err
-          Right (_type, ctx) -> do
-            let vars = map fst (tcSubsts ctx)
-            length vars `shouldBe` length (nub vars)
-            length vars `shouldSatisfy` (<= tcFreshId ctx)
+          Right (_type, ctx) ->
+            IntMap.size (tcSubst ctx) `shouldSatisfy` (<= tcFreshId ctx)
 
 inferHM :: Exp' -> TypeCheck (UType FoilTypePattern TypeSig) Foil.VoidS (UType FoilTypePattern TypeSig Foil.VoidS)
 inferHM = inferTypeNewClosed
@@ -79,9 +75,9 @@ genericRejects source = do
 genericTypeMatches :: String -> String -> Either String Bool
 genericTypeMatches source expectedSource = do
   expr <- pExp (myLexer source) >>= toExpClosedChecked
-  expected <- injectUType' . openForAlls . toTypeClosed <$> pType (myLexer expectedSource)
+  expected <- fromTypeClosed . openForAlls . toTypeClosed <$> pType (myLexer expectedSource)
   actual <- testInferTypeNewClosed expr
-  if equivHMType alphaEquiv (generalizeAll actual) (generalizeAll expected)
+  if equivUpToRenaming (MonoType actual) (MonoType expected)
     then Right True
     else
       Left $
@@ -92,8 +88,6 @@ genericTypeMatches source expectedSource = do
             "but actual is:",
             show actual
           ]
-  where
-    generalizeAll t = generalize (nub (allUVarsOfType t)) t
 
 -- | Replace the leading @forall@s of an expected type with unification variables.
 openForAlls :: Type' -> Type'
