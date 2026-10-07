@@ -20,7 +20,7 @@ import Data.Bifunctor.TH
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.String (IsString (..))
-import Data.ZipMatchK (ZipMatchK (..), zipMatchViaChooseLeft)
+import Data.ZipMatchK (ZipMatchK (..), zipMatchViaEq)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 import Generics.Kind.TH (deriveGenericK)
 import FreeFoilTypecheck.Orphans ()
@@ -45,9 +45,9 @@ deriveBifunctor ''TermSig
 deriveBifoldable ''TermSig
 deriveBitraversable ''TermSig
 
--- | Matching two terms ignores the names of unification variables.
+-- | Matching two terms compares the names of unification variables.
 instance ZipMatchK Raw.UVarIdent where
-  zipMatchWithK = zipMatchViaChooseLeft
+  zipMatchWithK = zipMatchViaEq
 
 deriveZipMatchK ''TermSig
 

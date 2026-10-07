@@ -2,12 +2,11 @@
 
 -- | 'ZipMatchK' instances for the literals of the object languages.
 --
--- Matching two nodes ignores their literals and keeps the left one, so
--- α-equivalence and unification compare only the constructors and the
--- subterms of nodes.
+-- Two nodes match only if their literals are equal, so α-equivalence and
+-- unification distinguish nodes that differ only in a literal.
 module FreeFoilTypecheck.Orphans () where
 
-import Data.ZipMatchK (ZipMatchK (..), zipMatchViaChooseLeft)
+import Data.ZipMatchK (ZipMatchK (..), zipMatchViaEq)
 
 instance ZipMatchK Integer where
-  zipMatchWithK = zipMatchViaChooseLeft
+  zipMatchWithK = zipMatchViaEq

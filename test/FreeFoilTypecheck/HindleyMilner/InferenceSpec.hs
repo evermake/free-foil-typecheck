@@ -56,14 +56,11 @@ dirWalk filefunc top = do
 -- the expression source code and inferring its' type, then parsing
 -- the expected type source code and comparing the obtained types.
 --
--- Using `FreeFoil.alphaEquiv` wouldn't work as expected, as it only compares
--- the AST structure and `FreeFoil.Var`s, and doesn't take into account values
--- of the literals:
+-- Using `FreeFoil.alphaEquiv` wouldn't work as expected, as the names of
+-- the unification variables in the inferred type are arbitrary:
 --
--- >>> FreeFoil.alphaEquiv Foil.emptyScope ("?a -> ?a" :: Type') ("?a -> ?b" :: Type')
--- True
--- >>> FreeFoil.alphaEquiv Foil.emptyScope ("1" :: Exp') ("2" :: Exp')
--- True
+-- >>> FreeFoil.alphaEquiv Foil.emptyScope ("?a -> ?a" :: Type') ("?b -> ?b" :: Type')
+-- False
 --
 -- We could generalize all type variables and compare the generalized types,
 -- however, this would not work either as the order of generalization is not
