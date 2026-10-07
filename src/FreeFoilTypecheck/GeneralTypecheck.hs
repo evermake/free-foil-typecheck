@@ -10,10 +10,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | A generic engine for Hindley–Milner type inference over free-foil syntax.
 --
@@ -58,6 +56,8 @@ import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import qualified Data.Kind as K
 import Data.List (nub)
+import Data.ZipMatchK (Mappings (..), ZipMatchK (..), zipMatch2)
+import Data.ZipMatchK.Bifunctor ()
 
 -- * Unification variables
 
@@ -127,8 +127,8 @@ deriveBifunctor ''MetaVarSig
 deriveBifoldable ''MetaVarSig
 deriveBitraversable ''MetaVarSig
 
-instance FreeFoil.ZipMatch MetaVarSig where
-  zipMatch (MetaVarSig x) (MetaVarSig y)
+instance ZipMatchK MetaVarSig where
+  zipMatchWithK (_ :^: _ :^: M0) (MetaVarSig x) (MetaVarSig y)
     | x == y = Just (MetaVarSig x)
     | otherwise = Nothing
 
@@ -170,7 +170,7 @@ toTypeScheme (PolyType typeScheme) = typeScheme
 toTypeScheme (MonoType ty) = TypeScheme Foil.NameBinderListEmpty ty
 
 -- | Quantify the given unification variables of a type.
-generalize :: (Bifunctor typeSig, Foil.CoSinkable binder) => [MetaVar] -> UType binder typeSig Foil.VoidS -> HMType (UType binder typeSig)
+generalize :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => [MetaVar] -> UType binder typeSig Foil.VoidS -> HMType (UType binder typeSig)
 generalize [] type_ = MonoType type_
 generalize xs type_ = withGeneralizedVars Foil.emptyScope [] xs $ \freshNameBinders env ->
   case (Foil.assertExt freshNameBinders, Foil.assertDistinct freshNameBinders) of
@@ -195,7 +195,7 @@ withGeneralizedVars scope env xs cont =
             cont (Foil.NameBinderListCons binder nameBinderList) env''
 
 -- | Instantiate the quantified variables of a type scheme with the given types.
-instantiateWith :: (Bifunctor typeSig, Foil.CoSinkable binder) => [UType binder typeSig Foil.VoidS] -> TypeScheme (UType binder typeSig) -> UType binder typeSig Foil.VoidS
+instantiateWith :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => [UType binder typeSig Foil.VoidS] -> TypeScheme (UType binder typeSig) -> UType binder typeSig Foil.VoidS
 instantiateWith types (TypeScheme binders body) =
   FreeFoil.substitutePattern Foil.emptyScope Foil.identitySubst binders types body
 
@@ -211,7 +211,7 @@ patternSize = go . Foil.nameBinderListOf
 -- quantified, in the order of their first occurrence.
 -- Two types are equal up to renaming of variables if and only if
 -- their canonical forms are α-equivalent.
-canonicalHMType :: (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) => HMType (UType binder typeSig) -> HMType (UType binder typeSig)
+canonicalHMType :: (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => HMType (UType binder typeSig) -> HMType (UType binder typeSig)
 canonicalHMType hmType =
   case toTypeScheme hmType of
     scheme@(TypeScheme binders body) ->
@@ -226,7 +226,7 @@ canonicalHMType hmType =
 -- chains of bindings (zonking, see the module header).
 -- The lookup function is given in the current scope, so it is sunk under binders.
 zonkWith ::
-  (Bifunctor typeSig, Foil.CoSinkable binder, Foil.Distinct n) =>
+  (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder, Foil.Distinct n) =>
   (MetaVar -> Maybe (UType binder typeSig n)) ->
   UType binder typeSig n ->
   UType binder typeSig n
@@ -236,7 +236,7 @@ zonkWith look = \case
   FreeFoil.Node node -> FreeFoil.Node (bimap (zonkScopedWith look) (zonkWith look) node)
 
 zonkScopedWith ::
-  (Bifunctor typeSig, Foil.CoSinkable binder, Foil.Distinct n) =>
+  (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder, Foil.Distinct n) =>
   (MetaVar -> Maybe (UType binder typeSig n)) ->
   UScopedType binder typeSig n ->
   UScopedType binder typeSig n
@@ -246,7 +246,7 @@ zonkScopedWith look (FreeFoil.ScopedAST binder body) =
       FreeFoil.ScopedAST binder (zonkWith (fmap Foil.sink . look) body)
 
 -- | Apply a substitution of unification variables to a closed type.
-zonk :: (Bifunctor typeSig, Foil.CoSinkable binder) => MetaVarMap (UType binder typeSig Foil.VoidS) -> UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS
+zonk :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => MetaVarMap (UType binder typeSig Foil.VoidS) -> UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS
 zonk subst = zonkWith (`lookupMetaVarMap` subst)
 
 -- | Unification variables of a type after applying a substitution
@@ -413,7 +413,7 @@ freshHM :: TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 freshHM = fromMetaVar <$> freshMetaVar
 
 -- | Unify two types, extending the substitution.
-unifyHM :: (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
+unifyHM :: (ZipMatchK typeSig, Bitraversable typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
 unifyHM typ1 typ2 = do
   subst <- tcSubst <$> get
   case (walk subst typ1, walk subst typ2) of
@@ -422,7 +422,7 @@ unifyHM typ1 typ2 = do
     (toMetaVar -> Just x, r) -> bindMetaVar x r
     (l, toMetaVar -> Just x) -> bindMetaVar x l
     (FreeFoil.Node l, FreeFoil.Node r) ->
-      case FreeFoil.zipMatch l r of
+      case zipMatch2 l r of
         Nothing -> failTypeCheck "cannot unify"
         Just lr -> bitraverse_ (\_ -> failTypeCheck "cannot unify types with binders") (uncurry unifyHM) lr
     (_, _) -> failTypeCheck "cannot unify"
@@ -449,7 +449,7 @@ bindMetaVar x type_ = do
 -- the unification variables that cannot occur in the typing environment
 -- (see 'Generalization').
 generalizeHM ::
-  (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
+  (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   Infer binder typeSig n ->
   TypeCheck (UType binder typeSig) n (HMType (UType binder typeSig))
 generalizeHM infer = do
@@ -470,7 +470,7 @@ generalizeHM infer = do
 -- returned by a computation such as @bound >>= checkBinderHM body@. Each type
 -- is generalised separately.
 generalizePatternHM ::
-  (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder) =>
+  (Bifunctor typeSig, Bifoldable typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   TypeCheck (UType binder typeSig) n [UType binder typeSig Foil.VoidS] ->
   TypeCheck (UType binder typeSig) n [HMType (UType binder typeSig)]
 generalizePatternHM infer = do
@@ -490,7 +490,7 @@ enterLevel action = do
 
 -- | Infer the type of a child term and unify it with the expected type.
 checkHM ::
-  (FreeFoil.ZipMatch typeSig, Bitraversable typeSig, Foil.CoSinkable binder) =>
+  (ZipMatchK typeSig, Bitraversable typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   Infer binder typeSig n ->
   UType binder typeSig Foil.VoidS ->
   TypeCheck (UType binder typeSig) n ()
@@ -510,14 +510,14 @@ inferScopedHM scoped type_ = do
   inferBodyHM scoped (map MonoType types)
 
 -- | Instantiate a type scheme with fresh unification variables.
-instantiateHM :: (Bifunctor typeSig, Foil.CoSinkable binder) => HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
+instantiateHM :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 instantiateHM (MonoType type_) = return type_
 instantiateHM (PolyType scheme@(TypeScheme binders _)) = do
   types <- mapM (const freshHM) [1 .. patternSize binders]
   return (instantiateWith types scheme)
 
 -- | Apply the current substitution to a type.
-zonkHM :: (Bifunctor typeSig, Foil.CoSinkable binder) => UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
+zonkHM :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 zonkHM type_ = do
   ctx <- get
   return (zonk (tcSubst ctx) type_)
@@ -525,14 +525,14 @@ zonkHM type_ = do
 -- * Generic traversal
 
 inferTypeNewClosed ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder, Bifunctor typeSig) =>
+  (Foil.CoSinkable typeBinder, Foil.SinkableK typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder, Bifunctor typeSig) =>
   FreeFoil.AST binder sig Foil.VoidS ->
   TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = reconstructType expr >>= zonkHM
 
 -- | Infer the principal type scheme of a closed term.
 inferTypeSchemeClosed ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder, Bifunctor typeSig, Bifoldable typeSig) =>
+  (Foil.CoSinkable typeBinder, Foil.SinkableK typeBinder, Bifunctor sig, Foil.CoSinkable binder, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder, Bifunctor typeSig, Bifoldable typeSig) =>
   Generalization ->
   FreeFoil.AST binder sig Foil.VoidS ->
   Either String (HMType (UType typeBinder typeSig))
@@ -542,7 +542,7 @@ inferTypeSchemeClosed generalization expr =
 -- | Infer the type of a term: instantiate the type of a variable,
 -- or apply the typing rule of a node to its (suspended) children.
 reconstructType ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder) =>
+  (Foil.CoSinkable typeBinder, Foil.SinkableK typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder) =>
   FreeFoil.AST binder sig n ->
   Infer typeBinder typeSig n
 reconstructType = \case
@@ -553,7 +553,7 @@ reconstructType = \case
     inferSigHM (bimap reconstructTypeScoped reconstructType node)
 
 reconstructTypeScoped ::
-  (Foil.CoSinkable typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder) =>
+  (Foil.CoSinkable typeBinder, Foil.SinkableK typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder) =>
   FreeFoil.ScopedAST binder sig n ->
   ScopedInfer typeBinder typeSig n
 reconstructTypeScoped (FreeFoil.ScopedAST binder body) =
@@ -568,7 +568,7 @@ class AlphaEquiv t where
   alphaEquiv :: (Foil.Distinct n) => Foil.Scope n -> t n -> t n -> Bool
 
 instance
-  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig, Foil.UnifiablePattern binder) =>
+  (Bitraversable sig, ZipMatchK sig, Foil.UnifiablePattern binder, Foil.SinkableK binder) =>
   AlphaEquiv (FreeFoil.AST binder sig)
   where
   alphaEquiv = FreeFoil.alphaEquiv
@@ -606,7 +606,7 @@ equivTypeScheme alphaEquivFunc (TypeScheme binders1 ty1) (TypeScheme binders2 ty
     Foil.NotUnifiable -> False
 
 -- | Equality of types up to renaming of unification and bound variables.
-equivUpToRenaming :: (Bifunctor typeSig, Bifoldable typeSig, FreeFoil.ZipMatch typeSig, Foil.UnifiablePattern binder) => HMType (UType binder typeSig) -> HMType (UType binder typeSig) -> Bool
+equivUpToRenaming :: (Bitraversable typeSig, ZipMatchK typeSig, Foil.UnifiablePattern binder, Foil.SinkableK binder) => HMType (UType binder typeSig) -> HMType (UType binder typeSig) -> Bool
 equivUpToRenaming t1 t2 = equivHMType alphaEquiv (canonicalHMType t1) (canonicalHMType t2)
 
 -- * Helpers for languages
@@ -629,22 +629,3 @@ transScopedAST ::
   FreeFoil.ScopedAST binder sig2 n
 transScopedAST phi (FreeFoil.ScopedAST binder body) =
   FreeFoil.ScopedAST binder (transAST phi body)
-
--- * Orphans
-
-deriving instance Functor (Foil.NameMap n)
-
-deriving instance Foldable (Foil.NameMap n)
-
-deriving instance Traversable (Foil.NameMap n)
-
-instance Foil.UnifiablePattern Foil.NameBinderList where
-  unifyPatterns Foil.NameBinderListEmpty Foil.NameBinderListEmpty =
-    Foil.SameNameBinders Foil.emptyNameBinders
-  unifyPatterns Foil.NameBinderListEmpty (Foil.NameBinderListCons _ _) =
-    Foil.NotUnifiable
-  unifyPatterns (Foil.NameBinderListCons _ _) Foil.NameBinderListEmpty =
-    Foil.NotUnifiable
-  unifyPatterns (Foil.NameBinderListCons x xs) (Foil.NameBinderListCons y ys) =
-    case (Foil.assertDistinct x, Foil.assertDistinct y) of
-      (Foil.Distinct, Foil.Distinct) -> Foil.unifyNameBinders x y `Foil.andThenUnifyPatterns` (xs, ys)

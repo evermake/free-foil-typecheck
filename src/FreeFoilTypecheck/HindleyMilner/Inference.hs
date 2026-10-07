@@ -25,6 +25,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.ZipMatchK (zipMatch2)
 import Debug.Trace (trace)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Syntax
@@ -33,10 +34,6 @@ import FreeFoilTypecheck.HindleyMilner.Syntax
 -- >>> :set -XOverloadedStrings
 
 --------------------------------------------------------------------------------
-
-deriving instance Functor (Foil.NameMap n)
-
-deriving instance Foldable (Foil.NameMap n)
 
 deriving instance (Show a) => Show (Foil.NameMap n a)
 
@@ -334,7 +331,7 @@ unifyConstraint levelsMap (Constraint constr) =
     (FreeFoil.Node l, FreeFoil.Node r) ->
       -- zipMatch (TArrowSig x1 x2) (TArrowSig y1 y2)
       --   = Just (TArrowSig (x1, y1) (x2, y2))
-      case FreeFoil.zipMatch l r of
+      case zipMatch2 l r of
         Nothing -> Left ("cannot unify " ++ show constr)
         -- `zipMatch` takes out corresponding terms from a node that we need
         --  to unify further.

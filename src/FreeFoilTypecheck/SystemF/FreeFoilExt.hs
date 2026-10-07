@@ -25,13 +25,6 @@ import Unsafe.Coerce (unsafeCoerce)
 
 -- HELPERS
 
--- FIXME: should be part of free-foil
-deriving instance Functor (Foil.NameMap n)
-
-deriving instance Foldable (Foil.NameMap n)
-
-deriving instance Traversable (Foil.NameMap n)
-
 nameMapToScope :: Foil.NameMap n a -> Foil.Scope n
 nameMapToScope (Foil.NameMap m) = Foil.UnsafeScope (IntMap.keysSet m)
 
