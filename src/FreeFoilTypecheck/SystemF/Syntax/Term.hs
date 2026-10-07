@@ -1,11 +1,15 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module FreeFoilTypecheck.SystemF.Syntax.Term where
 
@@ -16,6 +20,10 @@ import Data.Bifunctor.TH
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.String (IsString (..))
+import Data.ZipMatchK (ZipMatchK (..), zipMatchViaChooseLeft)
+import Data.ZipMatchK.TH (deriveZipMatchK)
+import Generics.Kind.TH (deriveGenericK)
+import FreeFoilTypecheck.Orphans ()
 import qualified FreeFoilTypecheck.SystemF.Parser.Abs as Raw
 import qualified FreeFoilTypecheck.SystemF.Parser.Par as Raw
 import qualified FreeFoilTypecheck.SystemF.Parser.Print as Raw
@@ -33,10 +41,15 @@ import FreeFoilTypecheck.SystemF.Syntax.Pattern
 -- ** Signature
 
 mkSignature ''Raw.Term ''Raw.Ident ''Raw.ScopedTerm ''Raw.Pattern
-deriveZipMatch ''TermSig
 deriveBifunctor ''TermSig
 deriveBifoldable ''TermSig
 deriveBitraversable ''TermSig
+
+-- | Matching two terms ignores the names of unification variables.
+instance ZipMatchK Raw.UVarIdent where
+  zipMatchWithK = zipMatchViaChooseLeft
+
+deriveZipMatchK ''TermSig
 
 -- ** Pattern synonyms
 
@@ -52,16 +65,19 @@ mkConvertFromFreeFoil ''Raw.Term ''Raw.Ident ''Raw.ScopedTerm ''Raw.Pattern
 -- * User-defined code
 
 newtype Term n = Term (AST (FoilPattern Term) TermSig n)
-  deriving (Foil.Sinkable)
+
+deriveGenericK ''Term
+instance Foil.SinkableK Term
+deriving newtype instance Foil.Sinkable Term
 
 type Term' = Term Foil.VoidS
 
 -- ** Conversion helpers (terms)
 
 -- | Convert 'Raw.Term' into a scope-safe term.
--- This is a special case of 'convertToAST'.
+-- This is a special case of 'unsafeConvertToAST'.
 toTerm :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Ident (Foil.Name n) -> Raw.Term -> Term n
-toTerm scope env = Term . convertToAST convertToTermSig (toFoilPattern toTerm) getTermFromScopedTerm scope env
+toTerm scope env = Term . unsafeConvertToAST convertToTermSig (toFoilPattern toTerm) getTermFromScopedTerm scope env
 
 -- | Convert 'Raw.Term' into a closed scope-safe term.
 -- This is a special case of 'toTerm'.

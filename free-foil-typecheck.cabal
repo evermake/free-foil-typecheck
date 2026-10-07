@@ -40,9 +40,9 @@ library
       FreeFoilTypecheck.HindleyMilner.Parser.Print
       FreeFoilTypecheck.HindleyMilner.Rules
       FreeFoilTypecheck.HindleyMilner.Syntax
+      FreeFoilTypecheck.Orphans
       FreeFoilTypecheck.ScopeCheck
       FreeFoilTypecheck.SystemF.Eval
-      FreeFoilTypecheck.SystemF.FreeFoilExt
       FreeFoilTypecheck.SystemF.Interpret
       FreeFoilTypecheck.SystemF.Parser.Abs
       FreeFoilTypecheck.SystemF.Parser.Lex
@@ -69,8 +69,9 @@ library
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.2.0
+    , free-foil >=0.5.0 && <0.6
     , hashable >=1.4.0
+    , kind-generics-th
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -89,9 +90,10 @@ executable interpreter-hm
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.2.0
+    , free-foil >=0.5.0 && <0.6
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -110,9 +112,10 @@ executable interpreter-sf
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.2.0
+    , free-foil >=0.5.0 && <0.6
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -131,9 +134,10 @@ executable repl-hm
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.2.0
+    , free-foil >=0.5.0 && <0.6
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -152,9 +156,10 @@ executable repl-sf
     , base >=4.7 && <5
     , bifunctors
     , containers
-    , free-foil >=0.2.0
+    , free-foil >=0.5.0 && <0.6
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -176,9 +181,10 @@ test-suite doctests
     , bifunctors
     , containers
     , doctest-parallel
-    , free-foil >=0.2.0
+    , free-foil >=0.5.0 && <0.6
     , free-foil-typecheck
     , hashable >=1.4.0
+    , kind-generics-th
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
@@ -205,10 +211,11 @@ test-suite spec
     , containers
     , directory
     , filepath
-    , free-foil >=0.2.0
+    , free-foil >=0.5.0 && <0.6
     , free-foil-typecheck
     , hashable >=1.4.0
     , hspec
     , hspec-discover
+    , kind-generics-th
     , unordered-containers >=0.2.20
   default-language: Haskell2010

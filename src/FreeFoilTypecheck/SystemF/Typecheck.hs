@@ -15,15 +15,16 @@
 
 module FreeFoilTypecheck.SystemF.Typecheck where
 
+import Control.Monad.Foil (nameMapToScope)
 import qualified Control.Monad.Foil as Foil
-import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Foil.Relative as Foil
+import Control.Monad.Free.Foil (unsinkAST)
 import qualified Control.Monad.Free.Foil as FreeFoil
-import Data.Bifoldable (Bifoldable)
 import Data.Bifunctor (Bifunctor)
+import Data.Bitraversable (Bitraversable)
+import Data.ZipMatchK (ZipMatchK)
 import Debug.Trace (trace)
 import FreeFoilTypecheck.SystemF.Syntax
-import FreeFoilTypecheck.SystemF.FreeFoilExt
 
 -- $setup
 -- >>> :set -XOverloadedStrings
@@ -51,7 +52,7 @@ class AlphaEquiv t where
   alphaEquiv :: (Foil.Distinct n) => Foil.Scope n -> t n -> t n -> Bool
 
 instance
-  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig, Foil.UnifiablePattern binder) =>
+  (Bitraversable sig, ZipMatchK sig, Foil.UnifiablePattern binder, Foil.SinkableK binder) =>
   AlphaEquiv (FreeFoil.AST binder sig)
   where
   alphaEquiv = FreeFoil.alphaEquiv
@@ -325,7 +326,7 @@ data PairOfScopedAST binder sig n where
   PairOfScopedAST :: Foil.NameBinders n l -> FreeFoil.AST binder sig l -> FreeFoil.AST binder sig l -> PairOfScopedAST binder sig n
 
 unifyScopes ::
-  (Foil.Distinct n, Foil.UnifiablePattern binder, Bifunctor sig) =>
+  (Foil.Distinct n, Foil.UnifiablePattern binder, Foil.SinkableK binder, Bifunctor sig) =>
   Foil.Scope n ->
   FreeFoil.ScopedAST binder sig n ->
   FreeFoil.ScopedAST binder sig n ->

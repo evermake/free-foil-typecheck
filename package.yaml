@@ -27,7 +27,8 @@ dependencies:
   array: ">= 0.5.3.0"
   bifunctors:
   containers:
-  free-foil: ">= 0.2.0"
+  free-foil: ">= 0.5.0 && < 0.6"
+  kind-generics-th:
   unordered-containers: ">= 0.2.20"
   hashable: ">= 1.4.0"
 

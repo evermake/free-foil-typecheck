@@ -12,14 +12,13 @@
 module FreeFoilTypecheck.SystemF.TypecheckGen where
 
 import Control.Monad (unless)
+import Control.Monad.Foil (nameMapToScope)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil.Relative as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
-import Data.Bifoldable (Bifoldable)
-import Data.Bifunctor (Bifunctor)
 import Data.Bitraversable
 import Data.Kind (Type)
-import FreeFoilTypecheck.SystemF.FreeFoilExt
+import Data.ZipMatchK (ZipMatchK)
 
 --------------------------------------------------------------------------------
 
@@ -69,7 +68,7 @@ class AlphaEquiv t where
 
 -- | Default instance for Free Foil ASTs
 instance
-  (Bifunctor sig, Bifoldable sig, FreeFoil.ZipMatch sig, Foil.UnifiablePattern binder) =>
+  (Bitraversable sig, ZipMatchK sig, Foil.UnifiablePattern binder, Foil.SinkableK binder) =>
   AlphaEquiv (FreeFoil.AST binder sig)
   where
   alphaEquiv = FreeFoil.alphaEquiv
@@ -183,6 +182,7 @@ bidirectionalCheck ::
     AlphaEquiv ty,
     TypingSig binder ty sig,
     Foil.UnifiablePattern binder,
+    Foil.SinkableK binder,
     Foil.Sinkable ty,
     TypedPattern ty binder
   ) =>
@@ -201,6 +201,7 @@ bidirectionalInfer ::
     AlphaEquiv ty,
     TypingSig binder ty sig,
     Foil.UnifiablePattern binder,
+    Foil.SinkableK binder,
     Foil.Sinkable ty,
     TypedPattern ty binder
   ) =>
@@ -218,6 +219,7 @@ bidirectionalCheckInfer ::
     Bitraversable sig,
     TypingSig binder ty sig,
     Foil.UnifiablePattern binder,
+    Foil.SinkableK binder,
     Foil.Sinkable ty,
     TypedPattern ty binder
   ) =>
@@ -262,6 +264,7 @@ bidirectionalCheckInferScoped ::
     Bitraversable sig,
     TypingSig binder ty sig,
     Foil.UnifiablePattern binder,
+    Foil.SinkableK binder,
     Foil.Sinkable ty,
     TypedPattern ty binder
   ) =>

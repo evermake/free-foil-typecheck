@@ -2,4 +2,6 @@ resolver: nightly-2024-08-02
 packages:
   - .
 extra-deps:
-  - free-foil-0.2.0@sha256:7f99c518a63ff314c7c8ca9776625e22ef56c5170593b52c82fea6f461ac753b,3300
+  - free-foil-0.5.0@sha256:a58e5a48680af1a7e5fb0e1d2b79802211e2dca832ddc38c6fa26af8572d3cd7,8354
+  # not on Stackage; revision 1 allows template-haskell 2.21 (GHC 9.8)
+  - kind-generics-th-0.2.3.3@sha256:c53280116db0dab9891f5a531679073f0b1f9ba6b8a3399bca11d98c506d0c62,1578

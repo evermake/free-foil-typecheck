@@ -7,6 +7,8 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module FreeFoilTypecheck.HindleyMilner.Syntax where
 
@@ -20,9 +22,13 @@ import Data.Map (Map)
 import qualified Data.Kind as K
 import qualified Data.Map as Map
 import Data.String (IsString (..))
+import Data.ZipMatchK (ZipMatchK (..), zipMatchViaChooseLeft)
+import Data.ZipMatchK.TH (deriveZipMatchK)
+import Generics.Kind.TH (deriveGenericK)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Par as Raw
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Print as Raw
+import FreeFoilTypecheck.Orphans ()
 import FreeFoilTypecheck.ScopeCheck (checkClosed)
 
 -- $setup
@@ -38,10 +44,15 @@ import FreeFoilTypecheck.ScopeCheck (checkClosed)
 -- ** Signature
 
 mkSignature ''Raw.Exp ''Raw.Ident ''Raw.ScopedExp ''Raw.Pattern
-deriveZipMatch ''ExpSig
 deriveBifunctor ''ExpSig
 deriveBifoldable ''ExpSig
 deriveBitraversable ''ExpSig
+
+-- | Matching two expressions ignores their type annotations.
+instance ZipMatchK Raw.Type where
+  zipMatchWithK = zipMatchViaChooseLeft
+
+deriveZipMatchK ''ExpSig
 
 -- ** Pattern synonyms
 
@@ -56,6 +67,8 @@ mkConvertFromFreeFoil ''Raw.Exp ''Raw.Ident ''Raw.ScopedExp ''Raw.Pattern
 
 mkFoilPattern ''Raw.Ident ''Raw.Pattern
 deriveCoSinkable ''Raw.Ident ''Raw.Pattern
+deriveGenericK ''FoilPattern
+instance Foil.SinkableK FoilPattern
 mkToFoilPattern ''Raw.Ident ''Raw.Pattern
 mkFromFoilPattern ''Raw.Ident ''Raw.Pattern
 
@@ -67,10 +80,15 @@ instance Foil.UnifiablePattern FoilPattern where
 -- ** Signature
 
 mkSignature ''Raw.Type ''Raw.Ident ''Raw.ScopedType ''Raw.TypePattern
-deriveZipMatch ''TypeSig
 deriveBifunctor ''TypeSig
 deriveBifoldable ''TypeSig
 deriveBitraversable ''TypeSig
+
+-- | Matching two types ignores the names of unification variables.
+instance ZipMatchK Raw.UVarIdent where
+  zipMatchWithK = zipMatchViaChooseLeft
+
+deriveZipMatchK ''TypeSig
 
 -- ** Pattern synonyms
 
@@ -85,6 +103,8 @@ mkConvertFromFreeFoil ''Raw.Type ''Raw.Ident ''Raw.ScopedType ''Raw.TypePattern
 
 mkFoilPattern ''Raw.Ident ''Raw.TypePattern
 deriveCoSinkable ''Raw.Ident ''Raw.TypePattern
+deriveGenericK ''FoilTypePattern
+instance Foil.SinkableK FoilTypePattern
 mkToFoilPattern ''Raw.Ident ''Raw.TypePattern
 mkFromFoilPattern ''Raw.Ident ''Raw.TypePattern
 
@@ -104,9 +124,9 @@ type Type' = Type Foil.VoidS
 -- ** Conversion helpers (expressions)
 
 -- | Convert 'Raw.Exp' into a scope-safe expression.
--- This is a special case of 'convertToAST'.
+-- This is a special case of 'unsafeConvertToAST'.
 toExp :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Ident (Foil.Name n) -> Raw.Exp -> AST FoilPattern ExpSig n
-toExp = convertToAST convertToExpSig toFoilPattern getExpFromScopedExp
+toExp = unsafeConvertToAST convertToExpSig toFoilPattern getExpFromScopedExp
 
 -- | Convert 'Raw.Exp' into a closed scope-safe expression.
 -- This is a special case of 'toExp'.
@@ -161,9 +181,9 @@ instance Show (Exp n) where
 -- ** Conversion helpers (types)
 
 -- | Convert 'Raw.Exp' into a scope-safe expression.
--- This is a special case of 'convertToAST'.
+-- This is a special case of 'unsafeConvertToAST'.
 toType :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Ident (Foil.Name n) -> Raw.Type -> AST FoilTypePattern TypeSig n
-toType = convertToAST convertToTypeSig toFoilTypePattern getTypeFromScopedType
+toType = unsafeConvertToAST convertToTypeSig toFoilTypePattern getTypeFromScopedType
 
 -- | Convert 'Raw.Type' into a closed scope-safe expression.
 -- This is a special case of 'toType'.

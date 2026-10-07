@@ -15,9 +15,10 @@
 
 module FreeFoilTypecheck.SystemF.TypingSig where
 
+import Control.Monad.Foil (nameMapToScope)
 import qualified Control.Monad.Foil as Foil
+import Control.Monad.Free.Foil (unsinkAST)
 import qualified Control.Monad.Free.Foil as FreeFoil
-import FreeFoilTypecheck.SystemF.FreeFoilExt
 import FreeFoilTypecheck.SystemF.Syntax
 import FreeFoilTypecheck.SystemF.TypecheckGen
 
