@@ -381,11 +381,7 @@ class HMTypingSig (binder :: Foil.S -> Foil.S -> K.Type) (typeSig :: K.Type -> K
 -- @type_@, and returns the types of the variables bound by @pattern@, in the
 -- order of the pattern ('Foil.nameBinderListOf'). For example, a rule for a
 -- pair pattern @(p, q)@ unifies @type_@ with a product of two fresh types and
--- checks @p@ and @q@ against them. This follows the judgement of Mini-ML that
--- builds the local environment of a pattern (Dominique Clément, Joëlle
--- Despeyroux, Thierry Despeyroux and Gilles Kahn. /A simple applicative
--- language: Mini-ML/. LFP 1986. <https://doi.org/10.1145/319838.319847>,
--- section 2.5.3).
+-- checks @p@ and @q@ against them.
 --
 -- The class plays the role of @TypedPattern@ by Diana Tomilovskaia in the
 -- System F engine ("FreeFoilTypecheck.SystemF.TypecheckGen"), which gives the
