@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -243,20 +244,23 @@ data Generalization
     Naive
   deriving (Eq, Show)
 
+-- | The state of inference. It changes at almost every step, so its fields
+-- are strict, and so are 'put' and 'enterScope'. Lazy updates would allocate
+-- a thunk for each new context and for each field that it changes.
 data TypingContext ty n = TypingContext
   { -- | Triangular substitution of unification variables.
-    tcSubst :: MetaVarMap (ty Foil.VoidS),
+    tcSubst :: !(MetaVarMap (ty Foil.VoidS)),
     -- | Types of the variables in scope.
-    tcTypings :: Foil.NameMap n (HMType ty),
+    tcTypings :: !(Foil.NameMap n (HMType ty)),
     -- | Next unification variable.
-    tcFreshId :: MetaVar,
+    tcFreshId :: !MetaVar,
     -- | Level of each unification variable that is not bound by the substitution.
     -- Invariant: a variable occurs in the typing environment (after applying
     -- the substitution) only if its level is at most the current level.
-    tcLevels :: MetaVarMap Level,
+    tcLevels :: !(MetaVarMap Level),
     -- | Current level: the number of enclosing 'generalizeHM's.
-    tcLevel :: Level,
-    tcGeneralization :: Generalization
+    tcLevel :: !Level,
+    tcGeneralization :: !Generalization
   }
 
 initialTypingContext :: Generalization -> TypingContext ty Foil.VoidS
@@ -289,7 +293,7 @@ get :: TypeCheck ty n (TypingContext ty n)
 get = TypeCheck $ \tc -> Right (tc, tc)
 
 put :: TypingContext ty n -> TypeCheck ty n ()
-put new = TypeCheck $ \_old -> Right ((), new)
+put !new = TypeCheck $ \_old -> Right ((), new)
 
 failTypeCheck :: String -> TypeCheck ty n a
 failTypeCheck msg = TypeCheck (\_ctx -> Left msg)
@@ -308,8 +312,10 @@ enterScope binder types (TypeCheck action)
         ("pattern binds " ++ show (patternSize binder) ++ " variable(s), but the typing rule gives " ++ show (length types) ++ " type(s)")
   | otherwise = TypeCheck $ \ctx -> do
       let typings = tcTypings ctx
-      (x, ctx') <- action ctx {tcTypings = Foil.addNameBinders binder types typings}
-      return (x, ctx' {tcTypings = typings})
+          !inner = ctx {tcTypings = Foil.addNameBinders binder types typings}
+      (x, ctx') <- action inner
+      let !outer = ctx' {tcTypings = typings}
+      return (x, outer)
 {-# INLINABLE enterScope #-}
 
 -- * Interface for typing rules
