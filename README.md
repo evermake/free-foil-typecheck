@@ -29,7 +29,7 @@ Contents of the mentioned directories are divided for Hindley-Milner, MiniML and
 
 ## Level-based generalisation in Hindley–Milner inference
 
-The Hindley–Milner type inference (`src/FreeFoilTypecheck/HindleyMilner/Inference.hs`) generalises the types of `let`-bound expressions using levels, following Rémy [^8] and the presentation by Kiselyov [^12]. Instead of scanning the typing environment for free unification variables at every `let`, the inference works as follows:
+The original Hindley–Milner type inference (`src/FreeFoilTypecheck/HindleyMilner/Inference.hs`) generalises the types of `let`-bound expressions using levels, following Rémy [^8] and the presentation by Kiselyov [^12]. Instead of scanning the typing environment for free unification variables at every `let`, the inference works as follows:
 
 - every unification variable records the level at which it was created;
 - the bound expression of a `let` is inferred one level deeper (`enterLevel`);
@@ -48,7 +48,7 @@ Typing rules receive the children of a node as suspended computations, so a rule
 
 Two languages use the engine:
 
-- the Hindley–Milner language (`src/FreeFoilTypecheck/HindleyMilner/Rules.hs`). Its REPL and interpreter still use the language-specific inference described in the previous section (`HindleyMilner/Inference.hs`). The generic engine is run by the tests and the benchmark;
+- the Hindley–Milner language (`src/FreeFoilTypecheck/HindleyMilner/Rules.hs`). Its REPL and interpreter still use the original inference described in the previous section (`HindleyMilner/Inference.hs`). The generic engine is run by the tests and the benchmark;
 - MiniML (`grammar/miniml.cf`, `src/FreeFoilTypecheck/MiniML/`), with patterns, `case`, pairs, sums, lists, `fix`, `letrec`, `let`, λ-abstractions, `if`, naturals, booleans and type annotations. One pattern language (the wildcard, variables, `inl`, `inr`, `[]`, `::` and pairs, nested arbitrarily) serves the branches of `case` and the binders of λ, `let`, `letrec` and `fix`. The branches of `case` are in braces: `case e of { p1 -> e1 | p2 -> e2 }`. Its name, its core (λ, `let`, `letrec`, `if` and pairs) and the patterns of λ, `let` and `letrec` follow Mini-ML [^13], and the other features are the simple extensions of the typed λ-calculus in Pierce's book [^14] (chapter 11). Adding it needed the grammar, the Free Foil syntax (`MiniML/Syntax.hs`) and the typing rules (`MiniML/Rules.hs`). The syntax is generated with Free Foil's `mkFreeFoil`.
 
 MiniML has no REPL or interpreter. To infer the type of a MiniML program, load the library in GHCi:
@@ -65,14 +65,16 @@ ghci> either id showHMType (inferMiniML LevelBased "letrec map = λf. λl. case 
 
 (`:m` is needed because both `HindleyMilner/Rules.hs` and `MiniML/Rules.hs` define `showHMType`.) The test programs are in `test/FreeFoilTypecheck/MiniML/files/`. Each well-typed program has its expected type in a `*.expected.ml` file.
 
-The tests of the generic engine run every Hindley–Milner and every MiniML test program in both generalisation modes (`GeneralTypecheckSpec` and `MiniML/RulesSpec`). Differential tests check that the generic engine with levels, the generic engine with naive generalisation and the language-specific inference agree on every Hindley–Milner test program and on random Hindley–Milner terms. For MiniML, which has no language-specific inference, they check that the two generalisation modes agree on random terms. To run only the MiniML tests or only the differential tests:
+The tests of the generic engine run every Hindley–Milner and every MiniML test program in both generalisation modes (`GeneralTypecheckSpec` and `MiniML/RulesSpec`). Differential tests check that the generic engine with levels, the generic engine with naive generalisation, the original inference and the hand-specialised engine (see below) agree on every Hindley–Milner test program and on random Hindley–Milner terms. For MiniML, which has only the generic engine, they check that the two generalisation modes agree on random terms. To run only the MiniML tests or only the differential tests:
 
 ```sh
 stack test free-foil-typecheck:spec --test-arguments='--match MiniML'
 stack test free-foil-typecheck:spec --test-arguments='--match Differential'
 ```
 
-The benchmark `generalization` (`bench/Main.hs`) times the three Hindley–Milner engines with [tasty-bench](https://hackage.haskell.org/package/tasty-bench) on programs with many nested `let`s (three families of programs, `nested-let`, `wide-env` and `let-chain`, with 160 to 1280 `let`s). It reports the mean time of each engine with twice the standard deviation, and the times of the other two engines relative to the generic engine with levels on the same program (e.g. `5.54x`). Run it with `stack bench`, or choose a family with a pattern and save the results as CSV:
+`src/FreeFoilTypecheck/HindleyMilner/SpecializedInference.hs` is the generic engine with levels, specialised by hand to the Hindley–Milner language: the same algorithm, on a first-order type of its own. It is the baseline for the cost of genericity. The original, unoptimised `HindleyMilner/Inference.hs` is not a fair baseline, since it lacks several optimisations of the generic engine.
+
+The benchmark `generalization` (`bench/Main.hs`) times the four Hindley–Milner engines with [tasty-bench](https://hackage.haskell.org/package/tasty-bench) on programs with many nested `let`s (three families of programs, `nested-let`, `wide-env` and `let-chain`, with 160 to 1280 `let`s). It reports the mean time of each engine with twice the standard deviation, and the times of the other three engines relative to the hand-specialised engine on the same program (e.g. `2.35x`). The engines are labelled `hand-specialized-levels` (the baseline), `generic-levels`, `generic-naive` (the generic engine with naive generalisation) and `unoptimized-levels` (the original, unoptimised inference). Run it with `stack bench`, or choose a family with a pattern and save the results as CSV:
 
 ```sh
 stack bench free-foil-typecheck:bench:generalization --benchmark-arguments='-p nested-let --csv bench.csv'
@@ -106,9 +108,9 @@ stack run interpreter-hm < test/FreeFoilTypecheck/HindleyMilner/files/well-typed
 [^6]: Robin Milner. 1978. A theory of type polymorphism in programming. J. Comput. System Sci. 17, 3 (1978), 348–375. https://doi.org/10.1016/
 0022-0000(78)90014-4
 [^7]: Luis Damas and Robin Milner. 1982. Principal type-schemes for functional programs. In Proceedings of the 9th ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (Albuquerque, New Mexico) (POPL ’82). Association for Computing Machinery, New York, NY, USA, 207–212. https://doi.org/10.1145/582153.582176
-[^8]: Didier Rémy. 1992. Extension of ML type system with a sorted equation theory on types. Research Report RR-1766. INRIA. https://inria.hal.science/inria-00077006 Projet FORMEL.
+[^8]: Didier Rémy. 1992. Extension of ML type system with a sorted equational theory on types. Research Report RR-1766. INRIA. https://inria.hal.science/inria-00077006 Projet FORMEL.
 [^9]: Martin Odersky, Martin Sulzmann, and Martin Wehr. 1999. Type inference with constrained types. Theory and practice of object systems 5, 1 (1999), 35–55.
-[^10]: Mark P Jones. 1999. Typing Haskell in Haskell. In _Haskell workshop_, Vol. 7.
+[^10]: Mark P. Jones. 1999. Typing Haskell in Haskell. In _Haskell Workshop_. https://web.cecs.pdx.edu/~mpj/thih/
 [^11]: Francesco Mazzoli and Andreas Abel. 2016. Typechecking through unification. arXiv:1609.09709 [cs.PL] https://arxiv.org/abs/1609.09709
 [^12]: Oleg Kiselyov. 2013. How OCaml type checker works – or what polymorphism and garbage collection have in common. https://okmij.org/ftp/ML/generalization.html
 [^13]: Dominique Clément, Joëlle Despeyroux, Thierry Despeyroux, and Gilles Kahn. 1986. A simple applicative language: Mini-ML. In Proceedings of the 1986 ACM Conference on LISP and Functional Programming (LFP ’86). Association for Computing Machinery, New York, NY, USA, 13–27. https://doi.org/10.1145/319838.319847

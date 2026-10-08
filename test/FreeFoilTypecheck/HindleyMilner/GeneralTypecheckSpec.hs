@@ -12,7 +12,6 @@ import Data.List (isSuffixOf, sort)
 import FreeFoilTypecheck.GeneralTypecheck
   ( Generalization (..),
     HMType (..),
-    MetaVar (..),
     TypeCheck (..),
     TypingContext (..),
     UType,
@@ -21,13 +20,13 @@ import FreeFoilTypecheck.GeneralTypecheck
     equivUpToRenaming,
     inferTypeNewClosed,
     inferTypeSchemeClosed,
-    sizeMetaVarMap,
   )
 import FreeFoilTypecheck.HindleyMilner.InferenceSpec (testFilesInDir)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp, pType)
 import FreeFoilTypecheck.HindleyMilner.Rules (fromTypeClosed, showHMType)
 import FreeFoilTypecheck.HindleyMilner.Syntax
+import FreeFoilTypecheck.MetaVar (MetaVar (..), sizeMetaVarMap)
 import System.FilePath (replaceExtension)
 import Test.Hspec
 

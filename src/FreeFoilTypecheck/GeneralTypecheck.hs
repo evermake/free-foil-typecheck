@@ -52,76 +52,12 @@ import Data.Bifunctor.Sum
 import Data.Bifunctor.TH
 import Data.Bitraversable (Bitraversable (..))
 import qualified Data.Foldable as F
-import qualified Data.IntMap as IntMap
-import qualified Data.IntSet as IntSet
 import qualified Data.Kind as K
 import Data.ZipMatchK (Mappings (..), ZipMatchK (..), zipMatch2)
 import Data.ZipMatchK.Bifunctor ()
+import FreeFoilTypecheck.MetaVar
 
 -- * Unification variables
-
--- | A unification variable (metavariable).
-newtype MetaVar = MetaVar Int
-  deriving (Eq, Ord, Show)
-
--- | The unification variable created after the given one.
-nextMetaVar :: MetaVar -> MetaVar
-nextMetaVar (MetaVar i) = MetaVar (i + 1)
-
--- | A finite map from unification variables.
-newtype MetaVarMap a = MetaVarMap (IntMap.IntMap a)
-
-emptyMetaVarMap :: MetaVarMap a
-emptyMetaVarMap = MetaVarMap IntMap.empty
-
-fromListMetaVarMap :: [(MetaVar, a)] -> MetaVarMap a
-fromListMetaVarMap xs = MetaVarMap (IntMap.fromList [(i, a) | (MetaVar i, a) <- xs])
-
-lookupMetaVarMap :: MetaVar -> MetaVarMap a -> Maybe a
-lookupMetaVarMap (MetaVar i) (MetaVarMap m) = IntMap.lookup i m
-
-findWithDefaultMetaVarMap :: a -> MetaVar -> MetaVarMap a -> a
-findWithDefaultMetaVarMap def (MetaVar i) (MetaVarMap m) = IntMap.findWithDefault def i m
-
-insertMetaVarMap :: MetaVar -> a -> MetaVarMap a -> MetaVarMap a
-insertMetaVarMap (MetaVar i) a (MetaVarMap m) = MetaVarMap (IntMap.insert i a m)
-
-adjustMetaVarMap :: (a -> a) -> MetaVar -> MetaVarMap a -> MetaVarMap a
-adjustMetaVarMap f (MetaVar i) (MetaVarMap m) = MetaVarMap (IntMap.adjust f i m)
-
-sizeMetaVarMap :: MetaVarMap a -> Int
-sizeMetaVarMap (MetaVarMap m) = IntMap.size m
-
--- | A finite set of unification variables.
-newtype MetaVarSet = MetaVarSet IntSet.IntSet
-
-emptyMetaVarSet :: MetaVarSet
-emptyMetaVarSet = MetaVarSet IntSet.empty
-
-insertMetaVarSet :: MetaVar -> MetaVarSet -> MetaVarSet
-insertMetaVarSet (MetaVar i) (MetaVarSet set) = MetaVarSet (IntSet.insert i set)
-
-fromListMetaVarSet :: [MetaVar] -> MetaVarSet
-fromListMetaVarSet xs = MetaVarSet (IntSet.fromList [i | MetaVar i <- xs])
-
-memberMetaVarSet :: MetaVar -> MetaVarSet -> Bool
-memberMetaVarSet (MetaVar i) (MetaVarSet set) = IntSet.member i set
-
--- | A level of generalisation: the number of enclosing 'generalizeHM's.
-newtype Level = Level Int
-  deriving (Eq, Ord, Show)
-
--- | The level outside of any 'generalizeHM'.
-outermostLevel :: Level
-outermostLevel = Level 0
-
--- | The level inside one more 'generalizeHM'.
-deeperLevel :: Level -> Level
-deeperLevel (Level n) = Level (n + 1)
-
--- | The level outside of the innermost 'generalizeHM'.
-shallowerLevel :: Level -> Level
-shallowerLevel (Level n) = Level (n - 1)
 
 -- | A signature with a single kind of node, a unification variable.
 -- The engine sums it with the type signature of a language (see 'UType').

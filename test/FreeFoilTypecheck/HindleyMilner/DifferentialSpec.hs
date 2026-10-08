@@ -1,10 +1,11 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | Differential tests: the generic engine (with level-based and with naive
--- generalisation) and the language-specific engine
--- ('FreeFoilTypecheck.HindleyMilner.Inference') must agree on every program:
--- either all of them reject it, or all of them infer the same type scheme
--- (up to renaming of variables).
+-- generalisation), the original, unoptimised engine
+-- ('FreeFoilTypecheck.HindleyMilner.Inference') and the hand-specialised
+-- engine ('FreeFoilTypecheck.HindleyMilner.SpecializedInference') must agree
+-- on every program: either all of them reject it, or all of them infer the
+-- same type scheme (up to renaming of variables).
 module FreeFoilTypecheck.HindleyMilner.DifferentialSpec where
 
 import Control.Monad (forM_, unless)
@@ -17,12 +18,13 @@ import FreeFoilTypecheck.GeneralTypecheck
     inferTypeSchemeClosed,
   )
 import FreeFoilTypecheck.HindleyMilner.GeneralTypecheckSpec (openForAlls)
-import qualified FreeFoilTypecheck.HindleyMilner.Inference as Specific
+import qualified FreeFoilTypecheck.HindleyMilner.Inference as Original
 import FreeFoilTypecheck.HindleyMilner.InferenceSpec (testFilesInDir)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp)
 import FreeFoilTypecheck.HindleyMilner.Parser.Print (printTree)
 import FreeFoilTypecheck.HindleyMilner.Rules (fromTypeClosed, showHMType)
+import qualified FreeFoilTypecheck.HindleyMilner.SpecializedInference as Specialized
 import FreeFoilTypecheck.HindleyMilner.Syntax
 import Test.Hspec
 import Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
@@ -30,7 +32,7 @@ import Test.QuickCheck
 
 spec :: Spec
 spec = do
-  describe "generic and language-specific engines agree on the test programs" $ do
+  describe "the four engines agree on the test programs" $ do
     paths <- runIO (testFilesInDir "./test/FreeFoilTypecheck/HindleyMilner/files")
     forM_ (sort (filter (\p -> not (".expected.lam" `isSuffixOf` p)) paths)) $ \path -> it path $ do
       contents <- readFile path
@@ -41,11 +43,11 @@ spec = do
           unless (allAgree results) $
             expectationFailure (unlines (map showVerdict results))
 
-  describe "generic and language-specific engines agree on random closed terms" $
+  describe "the four engines agree on random closed terms" $
     modifyMaxSuccess (const 3000) $ do
-      prop "levels = naive = language-specific (all constructs)" $
+      prop "levels = naive = unoptimised = hand-specialised (all constructs)" $
         forAll (sized (genExp [])) agreeOn
-      prop "levels = naive = language-specific (λ, application and let only)" $
+      prop "levels = naive = unoptimised = hand-specialised (λ, application and let only)" $
         forAll (sized (genPureExp [])) agreeOn
 
 agreeOn :: Raw.Exp -> Property
@@ -59,15 +61,17 @@ agreeOn raw =
 -- | The verdict of one engine: an error, or a type scheme.
 type Verdict = Either String (HMType (UType FoilTypePattern TypeSig))
 
--- | Verdicts of the three engines on a closed term.
+-- | Verdicts of the four engines on a closed term.
 verdicts :: Exp' -> [Verdict]
 verdicts expr =
   [ inferTypeSchemeClosed LevelBased expr,
     inferTypeSchemeClosed Naive expr,
-    fromSpecific <$> Specific.inferTypeClosed expr
+    fromForAlls <$> Original.inferTypeClosed expr,
+    fromForAlls <$> Specialized.inferTypeClosed expr
   ]
   where
-    fromSpecific = MonoType . fromTypeClosed . openForAlls
+    -- a type with leading @forall@s, as the last two engines return it
+    fromForAlls = MonoType . fromTypeClosed . openForAlls
 
 isAccepted :: Verdict -> Bool
 isAccepted = either (const False) (const True)

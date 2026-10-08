@@ -30,6 +30,7 @@ import Data.List (elemIndex, nub)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import FreeFoilTypecheck.GeneralTypecheck
+import FreeFoilTypecheck.MetaVar (MetaVar (..))
 import FreeFoilTypecheck.MiniML.FreeFoilConfig (typeOfScopedType)
 import qualified FreeFoilTypecheck.MiniML.Parser.Abs as Raw
 import qualified FreeFoilTypecheck.MiniML.Parser.Par as Raw

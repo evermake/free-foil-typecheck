@@ -1,15 +1,17 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Inference time of three engines on families of HM programs, measured with
+-- | Inference time of four engines on families of HM programs, measured with
 -- Bodigrim's tasty-bench:
 --
+-- * the generic engine with levels specialised by hand to the HM language
+--   ('FreeFoilTypecheck.HindleyMilner.SpecializedInference'), the baseline;
 -- * the generic engine with level-based generalisation;
 -- * the generic engine with naive generalisation (scans the environment);
--- * the language-specific engine ('FreeFoilTypecheck.HindleyMilner.Inference'),
+-- * the original, unoptimised engine ('FreeFoilTypecheck.HindleyMilner.Inference'),
 --   which also uses levels.
 --
--- The other two engines are compared ('bcompare') with the generic engine with
--- levels on the same program. Run with, e.g.,
+-- The other three engines are compared ('bcompare') with the hand-specialised
+-- engine on the same program. Run with, e.g.,
 -- @stack bench free-foil-typecheck:bench:generalization --benchmark-arguments='--csv bench.csv'@
 -- and choose a family with @-p nested-let@.
 module Main (main) where
@@ -19,9 +21,10 @@ import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifoldable (Bifoldable, bifoldMap)
 import Data.Monoid (Sum (..))
 import FreeFoilTypecheck.GeneralTypecheck (Generalization (..), HMType (..), TypeScheme (..), UType, inferTypeSchemeClosed)
-import qualified FreeFoilTypecheck.HindleyMilner.Inference as Specific
+import qualified FreeFoilTypecheck.HindleyMilner.Inference as Original
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp)
 import FreeFoilTypecheck.HindleyMilner.Rules ()
+import qualified FreeFoilTypecheck.HindleyMilner.SpecializedInference as Specialized
 import FreeFoilTypecheck.HindleyMilner.Syntax (Exp', FoilTypePattern, TypeSig, toExpClosed)
 -- (the instance of 'HMTypingSig' for the HM language comes from Rules)
 import Test.Tasty.Bench
@@ -41,9 +44,10 @@ data Engine = Engine
 
 engines :: [Engine]
 engines =
-  [ Engine "generic-levels" (generic LevelBased),
+  [ Engine "hand-specialized-levels" (either (const (-1)) astSize . Specialized.inferTypeClosed),
+    Engine "generic-levels" (generic LevelBased),
     Engine "generic-naive" (generic Naive),
-    Engine "specific-levels" (either (const (-1)) astSize . Specific.inferTypeClosed)
+    Engine "unoptimized-levels" (either (const (-1)) astSize . Original.inferTypeClosed)
   ]
   where
     generic :: Generalization -> Exp' -> Int
@@ -54,7 +58,7 @@ engines =
 
 -- | The engine that the others are compared with.
 baseline :: String
-baseline = "generic-levels"
+baseline = "hand-specialized-levels"
 
 inferHM :: Generalization -> Exp' -> Either String (HMType (UType FoilTypePattern TypeSig))
 inferHM = inferTypeSchemeClosed
