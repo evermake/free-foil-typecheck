@@ -55,7 +55,6 @@ import qualified Data.Foldable as F
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import qualified Data.Kind as K
-import Data.List (nub)
 import Data.ZipMatchK (Mappings (..), ZipMatchK (..), zipMatch2)
 import Data.ZipMatchK.Bifunctor ()
 
@@ -95,6 +94,12 @@ sizeMetaVarMap (MetaVarMap m) = IntMap.size m
 
 -- | A finite set of unification variables.
 newtype MetaVarSet = MetaVarSet IntSet.IntSet
+
+emptyMetaVarSet :: MetaVarSet
+emptyMetaVarSet = MetaVarSet IntSet.empty
+
+insertMetaVarSet :: MetaVar -> MetaVarSet -> MetaVarSet
+insertMetaVarSet (MetaVar i) (MetaVarSet set) = MetaVarSet (IntSet.insert i set)
 
 fromListMetaVarSet :: [MetaVar] -> MetaVarSet
 fromListMetaVarSet xs = MetaVarSet (IntSet.fromList [i | MetaVar i <- xs])
@@ -147,8 +152,13 @@ toMetaVar _ = Nothing
 -- | Unification variables of a type, in the order of their first occurrence.
 -- This does not look into the substitution (see 'freeMetaVars').
 metaVarsOf :: (Bifoldable typeSig) => UType binder typeSig n -> [MetaVar]
-metaVarsOf = nub . go
+metaVarsOf = dedupe emptyMetaVarSet . go
   where
+    dedupe _ [] = []
+    dedupe seen (x : xs)
+      | memberMetaVarSet x seen = dedupe seen xs
+      | otherwise = x : dedupe (insertMetaVarSet x seen) xs
+
     go :: (Bifoldable typeSig) => UType binder typeSig n -> [MetaVar]
     go (toMetaVar -> Just x) = [x]
     go (FreeFoil.Var _) = []
@@ -187,12 +197,18 @@ withGeneralizedVars ::
   r
 withGeneralizedVars scope env xs cont =
   case xs of
-    [] -> cont Foil.NameBinderListEmpty (map (fmap Foil.sink) env)
+    [] -> cont Foil.NameBinderListEmpty env
     y : ys -> Foil.withFresh scope $ \binder ->
       let scope' = Foil.extendScope binder scope
-          env' = (y, Foil.nameOf binder) : map (fmap Foil.sink) env
-       in withGeneralizedVars scope' env' ys $ \nameBinderList env'' ->
+          NamesWith env' = Foil.sink (NamesWith env) -- O(1), unlike sinking each name
+       in withGeneralizedVars scope' ((y, Foil.nameOf binder) : env') ys $ \nameBinderList env'' ->
             cont (Foil.NameBinderListCons binder nameBinderList) env''
+
+-- | Names paired with data. Sinking it is a coercion ('Foil.sink').
+newtype NamesWith a n = NamesWith [(a, Foil.Name n)]
+
+instance Foil.Sinkable (NamesWith a) where
+  sinkabilityProof rename (NamesWith xs) = NamesWith (map (fmap rename) xs)
 
 -- | Instantiate the quantified variables of a type scheme with the given types.
 instantiateWith :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => [UType binder typeSig Foil.VoidS] -> TypeScheme (UType binder typeSig) -> UType binder typeSig Foil.VoidS
