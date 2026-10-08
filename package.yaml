@@ -119,12 +119,16 @@ tests:
       - QuickCheck
 
 benchmarks:
-  nested-let:
+  generalization:
     main: Main.hs
     source-dirs: bench
     ghc-options:
       - -O2
-      - -fno-full-laziness
+      - -fproc-alignment=64
       - -rtsopts
+      - -with-rtsopts=-A32m
     dependencies:
       - free-foil-typecheck
+      - deepseq
+      - tasty
+      - tasty-bench

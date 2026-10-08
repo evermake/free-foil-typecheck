@@ -1,22 +1,22 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Inference time of three engines on families of HM programs:
+-- | Inference time of three engines on families of HM programs, measured with
+-- Bodigrim's tasty-bench:
 --
 -- * the generic engine with level-based generalisation;
 -- * the generic engine with naive generalisation (scans the environment);
 -- * the language-specific engine ('FreeFoilTypecheck.HindleyMilner.Inference'),
 --   which also uses levels.
 --
--- Usage: @nested-let [REPETITIONS [BUDGET_SECONDS]]@.
--- Prints CSV: family, engine, n, median, minimum and maximum time in milliseconds.
+-- The other two engines are compared ('bcompare') with the generic engine with
+-- levels on the same program. Run with, e.g.,
+-- @stack bench free-foil-typecheck:bench:generalization --benchmark-arguments='--csv bench.csv'@
+-- and choose a family with @-p nested-let@.
 module Main (main) where
 
-import Control.Exception (evaluate)
-import Control.Monad (forM, forM_, when)
+import Control.DeepSeq (NFData (..))
 import qualified Control.Monad.Free.Foil as FreeFoil
 import Data.Bifoldable (Bifoldable, bifoldMap)
-import Data.IORef
-import Data.List (sort)
 import Data.Monoid (Sum (..))
 import FreeFoilTypecheck.GeneralTypecheck (Generalization (..), HMType (..), TypeScheme (..), UType, inferTypeSchemeClosed)
 import qualified FreeFoilTypecheck.HindleyMilner.Inference as Specific
@@ -24,10 +24,8 @@ import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp)
 import FreeFoilTypecheck.HindleyMilner.Rules ()
 import FreeFoilTypecheck.HindleyMilner.Syntax (Exp', FoilTypePattern, TypeSig, toExpClosed)
 -- (the instance of 'HMTypingSig' for the HM language comes from Rules)
-import GHC.Clock (getMonotonicTimeNSec)
-import System.Environment (getArgs)
-import System.IO
-import Text.Printf (printf)
+import Test.Tasty.Bench
+import Test.Tasty.Patterns.Printer (printAwkExpr)
 
 -- | Number of nodes in an AST (forces the whole tree).
 astSize :: (Bifoldable sig) => FreeFoil.AST binder sig n -> Int
@@ -53,6 +51,10 @@ engines =
       Left _ -> -1
       Right (MonoType t) -> astSize t
       Right (PolyType (TypeScheme _ t)) -> astSize t
+
+-- | The engine that the others are compared with.
+baseline :: String
+baseline = "generic-levels"
 
 inferHM :: Generalization -> Exp' -> Either String (HMType (UType FoilTypePattern TypeSig))
 inferHM = inferTypeSchemeClosed
@@ -83,60 +85,38 @@ letChain n =
     ++ "f"
     ++ show n
 
+-- | @nested-let@ has k = n outer λs, @wide-env@ has k = 500.
 families :: [Family]
 families =
-  [ Family "nested-let (k = n)" (\n -> lambdasThenLets n n) [10, 20, 40, 80, 160, 320, 640, 1280],
-    Family "wide-env (k = 500)" (lambdasThenLets 500) [10, 20, 40, 80, 160, 320, 640],
-    Family "let-chain (k = 0)" letChain [10, 20, 40, 80, 160, 320, 640, 1280]
+  [ Family "nested-let" (\n -> lambdasThenLets n n) [160, 320, 640, 1280],
+    Family "wide-env" (lambdasThenLets 500) [160, 320, 640],
+    Family "let-chain" letChain [160, 320, 640, 1280]
   ]
 
-parseProgram :: String -> Exp'
+-- | A parsed program. 'env' forces it before the measurement.
+newtype Program = Program Exp'
+
+instance NFData Program where
+  rnf (Program expr) = rnf (astSize expr)
+
+parseProgram :: String -> Program
 parseProgram source = case pExp (myLexer source) of
   Left err -> error err
-  Right raw -> toExpClosed raw
+  Right raw -> Program (toExpClosed raw)
 
--- | Time one run in milliseconds. The term is built and forced first.
-timeRun :: Engine -> Family -> Int -> IO (Double, Int)
-timeRun engine family n = do
-  expr <- evaluate (parseProgram (familyProgram family n))
-  _ <- evaluate (astSize expr)
-  t0 <- getMonotonicTimeNSec
-  result <- evaluate (runEngine engine expr)
-  t1 <- getMonotonicTimeNSec
-  return (fromIntegral (t1 - t0) / 1e6, result)
+benchFamily :: Family -> Benchmark
+benchFamily family = bgroup (familyName family) (map benchSize (familySizes family))
+  where
+    benchSize n =
+      env (pure (parseProgram (familyProgram family n))) $ \program ->
+        bgroup size (map (benchEngine size program) engines)
+      where
+        size = "n=" ++ show n
+    benchEngine size program engine
+      | engineName engine == baseline = measured
+      | otherwise = bcompare (printAwkExpr (locateBenchmark [baseline, size, familyName family])) measured
+      where
+        measured = bench (engineName engine) (nf (\(Program expr) -> runEngine engine expr) program)
 
 main :: IO ()
-main = do
-  hSetBuffering stdout LineBuffering
-  args <- getArgs
-  let repetitions = case args of
-        r : _ -> read r
-        [] -> 7
-      budget = case args of
-        _ : b : _ -> read b
-        _ -> 20 :: Double
-  putStrLn "family,engine,n,median_ms,min_ms,max_ms,repetitions,result_size"
-  forM_ families $ \family ->
-    forM_ engines $ \engine -> do
-      stop <- newIORef False
-      forM_ (familySizes family) $ \n -> do
-        stopped <- readIORef stop
-        when (not stopped) $ do
-          runs <- forM [1 .. repetitions :: Int] $ \_ -> timeRun engine family n
-          let times = sort (map fst runs)
-              median = times !! (length times `div` 2)
-              resultSize = case runs of
-                (_, size) : _ -> size
-                [] -> 0
-          printf
-            "%s,%s,%d,%.3f,%.3f,%.3f,%d,%d\n"
-            (familyName family)
-            (engineName engine)
-            n
-            median
-            (minimum times)
-            (maximum times)
-            repetitions
-            resultSize
-          -- skip larger sizes once the repetitions of one size exceed the budget
-          when (median * fromIntegral repetitions > budget * 1000) $ writeIORef stop True
+main = defaultMain (map benchFamily families)
