@@ -108,9 +108,9 @@ stack run interpreter-hm < test/FreeFoilTypecheck/HindleyMilner/files/well-typed
 [^6]: Robin Milner. 1978. A theory of type polymorphism in programming. J. Comput. System Sci. 17, 3 (1978), 348–375. https://doi.org/10.1016/
 0022-0000(78)90014-4
 [^7]: Luis Damas and Robin Milner. 1982. Principal type-schemes for functional programs. In Proceedings of the 9th ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (Albuquerque, New Mexico) (POPL ’82). Association for Computing Machinery, New York, NY, USA, 207–212. https://doi.org/10.1145/582153.582176
-[^8]: Didier Rémy. 1992. Extension of ML type system with a sorted equation theory on types. Research Report RR-1766. INRIA. https://inria.hal.science/inria-00077006 Projet FORMEL.
+[^8]: Didier Rémy. 1992. Extension of ML type system with a sorted equational theory on types. Research Report RR-1766. INRIA. https://inria.hal.science/inria-00077006 Projet FORMEL.
 [^9]: Martin Odersky, Martin Sulzmann, and Martin Wehr. 1999. Type inference with constrained types. Theory and practice of object systems 5, 1 (1999), 35–55.
-[^10]: Mark P Jones. 1999. Typing Haskell in Haskell. In _Haskell workshop_, Vol. 7.
+[^10]: Mark P. Jones. 1999. Typing Haskell in Haskell. In _Haskell Workshop_. https://web.cecs.pdx.edu/~mpj/thih/
 [^11]: Francesco Mazzoli and Andreas Abel. 2016. Typechecking through unification. arXiv:1609.09709 [cs.PL] https://arxiv.org/abs/1609.09709
 [^12]: Oleg Kiselyov. 2013. How OCaml type checker works – or what polymorphism and garbage collection have in common. https://okmij.org/ftp/ML/generalization.html
 [^13]: Dominique Clément, Joëlle Despeyroux, Thierry Despeyroux, and Gilles Kahn. 1986. A simple applicative language: Mini-ML. In Proceedings of the 1986 ACM Conference on LISP and Functional Programming (LFP ’86). Association for Computing Machinery, New York, NY, USA, 13–27. https://doi.org/10.1145/319838.319847

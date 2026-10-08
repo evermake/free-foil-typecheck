@@ -28,7 +28,7 @@
 -- adjustment (@bind@), and one traversal resolves and generalises a type
 -- (@generalize@). The other references are:
 --
--- * Didier Rémy. /Extension of ML type system with a sorted equation theory on
+-- * Didier Rémy. /Extension of ML type system with a sorted equational theory on
 --   types/. Research Report RR-1766, INRIA, 1992.
 --   <https://inria.hal.science/inria-00077006>
 -- * Oleg Kiselyov. /How OCaml type checker works -- or what polymorphism and
