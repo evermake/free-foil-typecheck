@@ -5,8 +5,8 @@
 -- | Hindley–Milner type inference for the HM language: the generic engine
 -- ("FreeFoilTypecheck.GeneralTypecheck") with level-based generalisation,
 -- specialised to this language by hand. The algorithm and the order of its
--- steps are those of the generic engine: integer unification variables with
--- their levels in 'IntMap's, a triangular substitution resolved on demand
+-- steps are those of the generic engine: integer unification variables
+-- ('MetaVar') with their levels in a 'MetaVarMap', a triangular substitution resolved on demand
 -- (@walk@) and zonked when a type is generalised, unification as inference
 -- goes, and a typing environment that the substitution never rewrites. The
 -- benchmark @generalization@ uses this module as a baseline for the cost of
@@ -38,8 +38,6 @@
 --   <https://web.cecs.pdx.edu/~mpj/thih/>
 module FreeFoilTypecheck.HindleyMilner.SpecializedInference
   ( -- * Types
-    MetaVar,
-    Level,
     UType (..),
     Scheme (..),
 
@@ -53,23 +51,16 @@ where
 import Control.Monad (ap)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
-import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Syntax
+import FreeFoilTypecheck.MetaVar
 
 -- $setup
 -- >>> :set -XOverloadedStrings
 
 -- * Types
-
--- | A unification variable.
-type MetaVar = Int
-
--- | A level of generalisation: the number of enclosing generalisations (of
--- the bound terms of @let@s, and of the whole term).
-type Level = Int
 
 -- | Types with unification variables.
 data UType
@@ -91,9 +82,9 @@ data Scheme = Scheme Int UType
 
 data InferState = InferState
   { -- | Triangular substitution of unification variables.
-    stSubst :: IntMap UType,
+    stSubst :: MetaVarMap UType,
     -- | Level of each unification variable.
-    stLevels :: IntMap Level,
+    stLevels :: MetaVarMap Level,
     -- | Next unification variable.
     stNext :: MetaVar
   }
@@ -122,20 +113,25 @@ failInfer msg = Infer $ \_ -> Left msg
 -- | The level of a unification variable (each one gets a level when it is
 -- created).
 levelOf :: MetaVar -> InferState -> Level
-levelOf x st = IntMap.findWithDefault 0 x (stLevels st)
+levelOf x st = findWithDefaultMetaVarMap outermostLevel x (stLevels st)
 
 -- | Create the given number of unification variables at a level, and return
--- the first of them (the others follow it).
+-- the first of them (the others follow it, see 'blockVar').
 freshVars :: Level -> Int -> Infer MetaVar
 freshVars level count = do
   st <- get
   let first = stNext st
   put
     st
-      { stNext = first + count,
-        stLevels = foldr (`IntMap.insert` level) (stLevels st) [first .. first + count - 1]
+      { stNext = blockVar first count,
+        stLevels = foldr (`insertMetaVarMap` level) (stLevels st) (take count (iterate nextMetaVar first))
       }
   return first
+
+-- | The unification variable with the given index in a block of consecutive
+-- variables that starts with the given one.
+blockVar :: MetaVar -> Int -> MetaVar
+blockVar (MetaVar first) i = MetaVar (first + i)
 
 fresh :: Level -> Infer UType
 fresh level = UVar <$> freshVars level 1
@@ -143,8 +139,8 @@ fresh level = UVar <$> freshVars level 1
 -- * Unification
 
 -- | Resolve a bound unification variable at the root of a type.
-walk :: IntMap UType -> UType -> UType
-walk subst type_@(UVar x) = maybe type_ (walk subst) (IntMap.lookup x subst)
+walk :: MetaVarMap UType -> UType -> UType
+walk subst type_@(UVar x) = maybe type_ (walk subst) (lookupMetaVarMap x subst)
 walk _ type_ = type_
 
 -- | Unify two types, extending the substitution.
@@ -168,16 +164,16 @@ bind x type_ = do
   st <- get
   let level = levelOf x st
       adjust levels = \case
-        UVar y -> case IntMap.lookup y (stSubst st) of
+        UVar y -> case lookupMetaVarMap y (stSubst st) of
           Just bound -> adjust levels bound
           Nothing
             | y == x -> Nothing
-            | otherwise -> Just (IntMap.adjust (min level) y levels)
+            | otherwise -> Just (adjustMetaVarMap (min level) y levels)
         UArrow a b -> adjust levels a >>= (`adjust` b)
         _ -> Just levels
   case adjust (stLevels st) type_ of
     Nothing -> failInfer "occurs check failed"
-    Just levels -> put st {stSubst = IntMap.insert x type_ (stSubst st), stLevels = levels}
+    Just levels -> put st {stSubst = insertMetaVarMap x type_ (stSubst st), stLevels = levels}
 
 -- * Generalisation and instantiation
 
@@ -189,18 +185,18 @@ generalize :: Level -> UType -> Infer Scheme
 generalize level type_ = do
   st <- get
   let quantify acc@(count, numbers) = \case
-        UVar x -> case IntMap.lookup x (stSubst st) of
+        UVar x -> case lookupMetaVarMap x (stSubst st) of
           Just bound -> quantify acc bound
           Nothing
             | levelOf x st <= level -> (UVar x, acc)
-            | Just i <- IntMap.lookup x numbers -> (UGen i, acc)
-            | otherwise -> (UGen count, (count + 1, IntMap.insert x count numbers))
+            | Just i <- lookupMetaVarMap x numbers -> (UGen i, acc)
+            | otherwise -> (UGen count, (count + 1, insertMetaVarMap x count numbers))
         UArrow a b ->
           let (a', acc') = quantify acc a
               (b', acc'') = quantify acc' b
            in (UArrow a' b', acc'')
         t -> (t, acc)
-      (body, (quantified, _)) = quantify (0, IntMap.empty) type_
+      (body, (quantified, _)) = quantify (0, emptyMetaVarMap) type_
   return (Scheme quantified body)
 
 -- | Instantiate the quantified variables of a scheme with fresh unification
@@ -210,7 +206,7 @@ instantiate _ (Scheme 0 type_) = return type_
 instantiate level (Scheme count type_) = do
   first <- freshVars level count
   let go = \case
-        UGen i -> UVar (first + i)
+        UGen i -> UVar (blockVar first i)
         UArrow a b -> UArrow (go a) (go b)
         t -> t
   return (go type_)
@@ -259,7 +255,7 @@ infer level env = \case
     bodyType <- infer level (Foil.addNameBinder x (Scheme 0 paramType) env) body
     return (UArrow paramType bodyType)
   ELet bound (FoilPatternVar x) body -> do
-    boundScheme <- infer (level + 1) env bound >>= generalize level
+    boundScheme <- infer (deeperLevel level) env bound >>= generalize level
     infer level (Foil.addNameBinder x boundScheme env) body
   where
     check term expected = do
@@ -289,9 +285,9 @@ typeOfAnnotation level annotation = fst <$> go Map.empty annotation
 -- | Infer the principal type scheme of a closed term.
 inferSchemeClosed :: Exp' -> Either String Scheme
 inferSchemeClosed expr =
-  fst <$> runInfer (infer 1 Foil.emptyNameMap expr >>= generalize 0) initialState
+  fst <$> runInfer (infer (deeperLevel outermostLevel) Foil.emptyNameMap expr >>= generalize outermostLevel) initialState
   where
-    initialState = InferState {stSubst = IntMap.empty, stLevels = IntMap.empty, stNext = 0}
+    initialState = InferState {stSubst = emptyMetaVarMap, stLevels = emptyMetaVarMap, stNext = MetaVar 0}
 
 -- | Infer the principal type scheme of a closed term, as a type of the HM
 -- language with @forall@s (as 'FreeFoilTypecheck.HindleyMilner.Inference.inferTypeClosed').
@@ -318,9 +314,9 @@ schemeToType (Scheme count body) = quantify Foil.emptyScope (Names []) count
             (FoilTPatternVar binder)
             (quantify (Foil.extendScope binder scope) (Names (Foil.nameOf binder : names')) (k - 1))
 
-    fromUType :: IntMap (Foil.Name n) -> UType -> Type n
+    fromUType :: IntMap.IntMap (Foil.Name n) -> UType -> Type n
     fromUType names = \case
-      UVar x -> TUVar (Raw.UVarIdent ("?u" ++ show x))
+      UVar (MetaVar x) -> TUVar (Raw.UVarIdent ("?u" ++ show x))
       UGen i -> FreeFoil.Var (names IntMap.! i)
       UNat -> TNat
       UBool -> TBool

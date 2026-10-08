@@ -18,6 +18,7 @@ import Data.List (elemIndex, nub)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import FreeFoilTypecheck.GeneralTypecheck
+import FreeFoilTypecheck.MetaVar (MetaVar (..))
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Syntax
 import FreeFoilTypecheck.ScopeCheck (checkClosed)

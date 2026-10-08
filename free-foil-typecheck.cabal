@@ -42,6 +42,7 @@ library
       FreeFoilTypecheck.HindleyMilner.Rules
       FreeFoilTypecheck.HindleyMilner.SpecializedInference
       FreeFoilTypecheck.HindleyMilner.Syntax
+      FreeFoilTypecheck.MetaVar
       FreeFoilTypecheck.MiniML.FreeFoilConfig
       FreeFoilTypecheck.MiniML.Parser.Abs
       FreeFoilTypecheck.MiniML.Parser.Lex
