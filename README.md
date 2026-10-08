@@ -23,8 +23,9 @@ The repository has the following directory structure:
 - `src/` — source code of type inference and type checking algorithms.
 - `app/` — source code of REPL and interpreter binaries for playing with the current implementations.
 - `test/` — scripts and test-cases with input programs for testing type checkers functionality.
+- `bench/` — a benchmark of generalisation in Hindley–Milner inference.
 
-Contents of the mentioned directories are divided for Hindley-Milner and System F implementations.
+Contents of the mentioned directories are divided for Hindley-Milner, MiniML and System F implementations. MiniML has no REPL or interpreter in `app/`.
 
 ## Level-based generalisation in Hindley–Milner inference
 
@@ -39,6 +40,44 @@ Intuitively, a unification variable whose level is above the current one does no
 
 The test programs in `test/FreeFoilTypecheck/HindleyMilner/files/` include the examples from Kiselyov's article (`kiselyov_*.lam`). Each well-typed program has its expected type in a `*.expected.lam` file.
 
+## Generic Hindley–Milner engine
+
+`src/FreeFoilTypecheck/GeneralTypecheck.hs` implements Hindley–Milner type inference once, for any object language whose syntax is generated with Free Foil. A language provides the signatures of its terms and types, one typing rule per node of its term signature (an instance of `HMTypingSig`) and the typing rules of its patterns (an instance of `HMTypingPattern`): a pattern checked against a type gives the types of its variables. The engine provides unification variables, unification with an occurs check, instantiation of type schemes and level-based generalisation.
+
+Typing rules receive the children of a node as suspended computations, so a rule decides when, and at which level, each child is inferred. For example, the rule for `let` infers the bound term inside `generalizeHM`, one level deeper. The documentation of the class `HMTypingSig` has the details and the alternative design that we did not choose. Naive generalisation (quantifying the variables that do not occur in the typing environment, as in Damas and Milner [^7]) is available as `Generalization = Naive`, for comparison.
+
+Two languages use the engine:
+
+- the Hindley–Milner language (`src/FreeFoilTypecheck/HindleyMilner/Rules.hs`). Its REPL and interpreter still use the language-specific inference described in the previous section (`HindleyMilner/Inference.hs`). The generic engine is run by the tests and the benchmark;
+- MiniML (`grammar/miniml.cf`, `src/FreeFoilTypecheck/MiniML/`), with patterns, `case`, pairs, sums, lists, `fix`, `letrec`, `let`, λ-abstractions, `if`, naturals, booleans and type annotations. One pattern language (the wildcard, variables, `inl`, `inr`, `[]`, `::` and pairs, nested arbitrarily) serves the branches of `case` and the binders of λ, `let`, `letrec` and `fix`. The branches of `case` are in braces: `case e of { p1 -> e1 | p2 -> e2 }`. Its name, its core (λ, `let`, `letrec`, `if` and pairs) and the patterns of λ, `let` and `letrec` follow Mini-ML [^13], and the other features are the simple extensions of the typed λ-calculus in Pierce's book [^14] (chapter 11). Adding it needed the grammar, the Free Foil syntax (`MiniML/Syntax.hs`) and the typing rules (`MiniML/Rules.hs`). The syntax is generated with Free Foil's `mkFreeFoil`.
+
+MiniML has no REPL or interpreter. To infer the type of a MiniML program, load the library in GHCi:
+
+```sh
+stack ghci free-foil-typecheck:lib
+```
+
+```haskell
+ghci> :m FreeFoilTypecheck.GeneralTypecheck FreeFoilTypecheck.MiniML.Rules
+ghci> either id showHMType (inferMiniML LevelBased "letrec map = λf. λl. case l of { [] -> [] | x :: xs -> f x :: map f xs } in map")
+"forall x0 . (forall x1 . (x0 -> x1) -> List x0 -> List x1)"
+```
+
+(`:m` is needed because both `HindleyMilner/Rules.hs` and `MiniML/Rules.hs` define `showHMType`.) The test programs are in `test/FreeFoilTypecheck/MiniML/files/`. Each well-typed program has its expected type in a `*.expected.ml` file.
+
+The tests of the generic engine run every Hindley–Milner and every MiniML test program in both generalisation modes (`GeneralTypecheckSpec` and `MiniML/RulesSpec`). Differential tests check that the generic engine with levels, the generic engine with naive generalisation and the language-specific inference agree on every Hindley–Milner test program and on random Hindley–Milner terms. For MiniML, which has no language-specific inference, they check that the two generalisation modes agree on random terms. To run only the MiniML tests or only the differential tests:
+
+```sh
+stack test free-foil-typecheck:spec --test-arguments='--match MiniML'
+stack test free-foil-typecheck:spec --test-arguments='--match Differential'
+```
+
+The benchmark `generalization` (`bench/Main.hs`) times the three Hindley–Milner engines with [tasty-bench](https://hackage.haskell.org/package/tasty-bench) on programs with many nested `let`s (three families of programs, `nested-let`, `wide-env` and `let-chain`, with 160 to 1280 `let`s). It reports the mean time of each engine with twice the standard deviation, and the times of the other two engines relative to the generic engine with levels on the same program (e.g. `5.54x`). Run it with `stack bench`, or choose a family with a pattern and save the results as CSV:
+
+```sh
+stack bench free-foil-typecheck:bench:generalization --benchmark-arguments='-p nested-let --csv bench.csv'
+```
+
 ## Building and testing
 
 The project is built with [Stack](https://docs.haskellstack.org/):
@@ -46,6 +85,7 @@ The project is built with [Stack](https://docs.haskellstack.org/):
 ```sh
 stack build
 stack test
+stack bench
 ```
 
 The REPLs read one expression per line, and the interpreters read a program from the standard input:
@@ -71,3 +111,5 @@ stack run interpreter-hm < test/FreeFoilTypecheck/HindleyMilner/files/well-typed
 [^10]: Mark P Jones. 1999. Typing Haskell in Haskell. In _Haskell workshop_, Vol. 7.
 [^11]: Francesco Mazzoli and Andreas Abel. 2016. Typechecking through unification. arXiv:1609.09709 [cs.PL] https://arxiv.org/abs/1609.09709
 [^12]: Oleg Kiselyov. 2013. How OCaml type checker works – or what polymorphism and garbage collection have in common. https://okmij.org/ftp/ML/generalization.html
+[^13]: Dominique Clément, Joëlle Despeyroux, Thierry Despeyroux, and Gilles Kahn. 1986. A simple applicative language: Mini-ML. In Proceedings of the 1986 ACM Conference on LISP and Functional Programming (LFP ’86). Association for Computing Machinery, New York, NY, USA, 13–27. https://doi.org/10.1145/319838.319847
+[^14]: Benjamin C. Pierce. 2002. Types and Programming Languages. MIT Press.
