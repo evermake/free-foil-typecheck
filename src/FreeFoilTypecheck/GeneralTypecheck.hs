@@ -25,7 +25,10 @@
 -- triangular substitution in a 'MetaVarMap': a binding may mention other
 -- variables, and bindings are never composed. 'zonkWith' resolves a type by
 -- following the chains of bindings, as @zonkType@ does in the type checker of
--- Peyton Jones et al. The sources of these techniques are:
+-- Peyton Jones et al. Level-based generalisation ('LevelBased') follows Rémy,
+-- in the presentation of Kiselyov. As in Kiselyov's @sound_eager@, one
+-- traversal of a type does both the occurs check and the level adjustment
+-- ('occursCheckAdjust'). The sources of these techniques are:
 --
 -- * Simon Peyton Jones, Dimitrios Vytiniotis, Stephanie Weirich and Mark
 --   Shields. /Practical type inference for arbitrary-rank types/. Journal of
@@ -39,6 +42,12 @@
 -- * Wren Romano. The Haskell library unification-fd, module
 --   @Control.Unification.IntVar@: integer unification variables bound in an
 --   @IntMap@. <https://hackage.haskell.org/package/unification-fd>
+-- * Didier Rémy. /Extension of ML type system with a sorted equational theory on
+--   types/. Research Report RR-1766, INRIA, 1992.
+--   <https://inria.hal.science/inria-00077006>
+-- * Oleg Kiselyov. /How OCaml type checker works -- or what polymorphism and
+--   garbage collection have in common/. 2013.
+--   <https://okmij.org/ftp/ML/generalization.html>
 module FreeFoilTypecheck.GeneralTypecheck where
 
 import Control.Monad (ap)
@@ -403,16 +412,45 @@ unifyHM typ1 typ2 = do
 -- | Bind a unification variable (after the occurs check).
 -- With 'LevelBased' generalisation, the variables of the type
 -- get the level of the bound variable, if theirs is deeper.
+-- One traversal of the type does both (see 'occursCheckAdjust').
 bindMetaVar :: (Bifoldable typeSig) => MetaVar -> UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n ()
 bindMetaVar x type_ = do
   ctx <- get
-  let vars = freeMetaVars (tcSubst ctx) type_
-      levels = case (tcGeneralization ctx, lookupMetaVarMap x (tcLevels ctx)) of
-        (LevelBased, Just level) -> foldr (adjustMetaVarMap (min level)) (tcLevels ctx) vars
-        _ -> tcLevels ctx
-  if x `elem` vars
-    then failTypeCheck "occurs check failed"
-    else put ctx {tcSubst = insertMetaVarMap x type_ (tcSubst ctx), tcLevels = levels}
+  let adjust = case (tcGeneralization ctx, lookupMetaVarMap x (tcLevels ctx)) of
+        (LevelBased, Just level) -> adjustMetaVarMap (min level)
+        _ -> \_ levels -> levels
+  case occursCheckAdjust (tcSubst ctx) x adjust (tcLevels ctx) type_ of
+    Nothing -> failTypeCheck "occurs check failed"
+    Just levels -> put ctx {tcSubst = insertMetaVarMap x type_ (tcSubst ctx), tcLevels = levels}
+
+-- | The occurs check with an update of the levels, in one traversal of a type
+-- that follows the substitution (as 'freeMetaVars' does), as in Kiselyov's
+-- @sound_eager@ (see the module header).
+-- @occursCheckAdjust subst x adjust levels type_@ is 'Nothing' if @x@ occurs
+-- in @type_@ (the traversal stops at the first occurrence). Otherwise, it
+-- returns @levels@ updated by @adjust@ at each occurrence of an unbound
+-- unification variable in @type_@.
+occursCheckAdjust ::
+  (Bifoldable typeSig) =>
+  MetaVarMap (UType binder typeSig Foil.VoidS) ->
+  MetaVar ->
+  (MetaVar -> MetaVarMap Level -> MetaVarMap Level) ->
+  MetaVarMap Level ->
+  UType binder typeSig n ->
+  Maybe (MetaVarMap Level)
+occursCheckAdjust subst x adjust levels = \case
+  (toMetaVar -> Just y) -> case lookupMetaVarMap y subst of
+    Just type_ -> occursCheckAdjust subst x adjust levels type_
+    Nothing
+      | y == x -> Nothing
+      | otherwise -> Just (adjust y levels)
+  FreeFoil.Var _ -> Just levels
+  FreeFoil.Node node ->
+    bifoldlM
+      (\levels' (FreeFoil.ScopedAST _ body) -> occursCheckAdjust subst x adjust levels' body)
+      (occursCheckAdjust subst x adjust)
+      levels
+      node
 
 -- | Infer the type of a child term one level deeper, and generalise it over
 -- the unification variables that cannot occur in the typing environment
