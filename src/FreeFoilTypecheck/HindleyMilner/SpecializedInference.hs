@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
@@ -80,13 +81,15 @@ data Scheme = Scheme Int UType
 
 -- * Inference monad
 
+-- | The state of inference. As in the generic engine, its fields are strict,
+-- and so is 'put'.
 data InferState = InferState
   { -- | Triangular substitution of unification variables.
-    stSubst :: MetaVarMap UType,
+    stSubst :: !(MetaVarMap UType),
     -- | Level of each unification variable.
-    stLevels :: MetaVarMap Level,
+    stLevels :: !(MetaVarMap Level),
     -- | Next unification variable.
-    stNext :: MetaVar
+    stNext :: !MetaVar
   }
 
 newtype Infer a = Infer {runInfer :: InferState -> Either String (a, InferState)}
@@ -105,7 +108,7 @@ get :: Infer InferState
 get = Infer $ \st -> Right (st, st)
 
 put :: InferState -> Infer ()
-put st = Infer $ \_ -> Right ((), st)
+put !st = Infer $ \_ -> Right ((), st)
 
 failInfer :: String -> Infer a
 failInfer msg = Infer $ \_ -> Left msg
