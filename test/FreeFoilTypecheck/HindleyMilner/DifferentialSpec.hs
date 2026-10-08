@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | Differential tests: the generic engine (with level-based and with naive
--- generalisation), the language-specific engine
+-- generalisation), the original, unoptimised engine
 -- ('FreeFoilTypecheck.HindleyMilner.Inference') and the hand-specialised
 -- engine ('FreeFoilTypecheck.HindleyMilner.SpecializedInference') must agree
 -- on every program: either all of them reject it, or all of them infer the
@@ -18,7 +18,7 @@ import FreeFoilTypecheck.GeneralTypecheck
     inferTypeSchemeClosed,
   )
 import FreeFoilTypecheck.HindleyMilner.GeneralTypecheckSpec (openForAlls)
-import qualified FreeFoilTypecheck.HindleyMilner.Inference as Specific
+import qualified FreeFoilTypecheck.HindleyMilner.Inference as Original
 import FreeFoilTypecheck.HindleyMilner.InferenceSpec (testFilesInDir)
 import qualified FreeFoilTypecheck.HindleyMilner.Parser.Abs as Raw
 import FreeFoilTypecheck.HindleyMilner.Parser.Par (myLexer, pExp)
@@ -45,9 +45,9 @@ spec = do
 
   describe "the four engines agree on random closed terms" $
     modifyMaxSuccess (const 3000) $ do
-      prop "levels = naive = language-specific = specialised (all constructs)" $
+      prop "levels = naive = unoptimised = hand-specialised (all constructs)" $
         forAll (sized (genExp [])) agreeOn
-      prop "levels = naive = language-specific = specialised (λ, application and let only)" $
+      prop "levels = naive = unoptimised = hand-specialised (λ, application and let only)" $
         forAll (sized (genPureExp [])) agreeOn
 
 agreeOn :: Raw.Exp -> Property
@@ -66,7 +66,7 @@ verdicts :: Exp' -> [Verdict]
 verdicts expr =
   [ inferTypeSchemeClosed LevelBased expr,
     inferTypeSchemeClosed Naive expr,
-    fromForAlls <$> Specific.inferTypeClosed expr,
+    fromForAlls <$> Original.inferTypeClosed expr,
     fromForAlls <$> Specialized.inferTypeClosed expr
   ]
   where
