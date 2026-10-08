@@ -184,22 +184,24 @@ bind x type_ = do
 -- traversal, this applies the substitution and quantifies the unification
 -- variables that are deeper than the given level, in the order of their first
 -- occurrence. These variables cannot occur in the typing environment.
+-- The traversal is strict, so that it does not build a chain of thunks
+-- for the count of the quantified variables and their numbers.
 generalize :: Level -> UType -> Infer Scheme
 generalize level type_ = do
   st <- get
-  let quantify acc@(count, numbers) = \case
+  let quantify !count !numbers = \case
         UVar x -> case lookupMetaVarMap x (stSubst st) of
-          Just bound -> quantify acc bound
+          Just bound -> quantify count numbers bound
           Nothing
-            | levelOf x st <= level -> (UVar x, acc)
-            | Just i <- lookupMetaVarMap x numbers -> (UGen i, acc)
-            | otherwise -> (UGen count, (count + 1, insertMetaVarMap x count numbers))
+            | levelOf x st <= level -> (UVar x, count, numbers)
+            | Just i <- lookupMetaVarMap x numbers -> (UGen i, count, numbers)
+            | otherwise -> (UGen count, count + 1, insertMetaVarMap x count numbers)
         UArrow a b ->
-          let (a', acc') = quantify acc a
-              (b', acc'') = quantify acc' b
-           in (UArrow a' b', acc'')
-        t -> (t, acc)
-      (body, (quantified, _)) = quantify (0, emptyMetaVarMap) type_
+          let !(a', count', numbers') = quantify count numbers a
+              !(b', count'', numbers'') = quantify count' numbers' b
+           in (UArrow a' b', count'', numbers'')
+        t -> (t, count, numbers)
+      !(body, quantified, _) = quantify 0 emptyMetaVarMap type_
   return (Scheme quantified body)
 
 -- | Instantiate the quantified variables of a scheme with fresh unification
