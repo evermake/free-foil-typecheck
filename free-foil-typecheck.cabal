@@ -232,14 +232,14 @@ test-suite spec
     , unordered-containers >=0.2.20
   default-language: Haskell2010
 
-benchmark nested-let
+benchmark generalization
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
       Paths_free_foil_typecheck
   hs-source-dirs:
       bench
-  ghc-options: -Wall -Werror -O2 -fno-full-laziness -rtsopts
+  ghc-options: -Wall -Werror -O2 -fproc-alignment=64 -rtsopts -with-rtsopts=-A32m
   build-tools:
       alex >=3.2.4
     , happy >=1.19.9
@@ -250,9 +250,12 @@ benchmark nested-let
     , base >=4.7 && <5
     , bifunctors
     , containers
+    , deepseq
     , free-foil >=0.5.0 && <0.6
     , free-foil-typecheck
     , hashable >=1.4.0
     , kind-generics-th
+    , tasty
+    , tasty-bench
     , unordered-containers >=0.2.20
   default-language: Haskell2010
