@@ -217,8 +217,10 @@ instantiate level (Scheme count type_) = do
 -- * Inference
 
 -- | Infer the type of a term at a level, in a typing environment.
+-- The level and the environment are strict arguments. The generic engine
+-- keeps them in its state, whose fields are strict.
 infer :: Level -> Foil.NameMap n Scheme -> Exp n -> Infer UType
-infer level env = \case
+infer !level !env = \case
   FreeFoil.Var x -> instantiate level (Foil.lookupName x env)
   ETrue -> return UBool
   EFalse -> return UBool
