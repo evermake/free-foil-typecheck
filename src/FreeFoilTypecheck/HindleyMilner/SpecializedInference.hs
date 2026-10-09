@@ -81,8 +81,7 @@ data Scheme = Scheme Int UType
 
 -- * Inference monad
 
--- | The state of inference. As in the generic engine, its fields are strict,
--- and so is 'put'.
+-- | The state of inference.
 data InferState = InferState
   { -- | Triangular substitution of unification variables.
     stSubst :: !(MetaVarMap UType),
@@ -108,6 +107,8 @@ get :: Infer InferState
 get = Infer $ \st -> Right (st, st)
 
 put :: InferState -> Infer ()
+-- Strict, as are the fields of 'InferState' and the state of the generic
+-- engine.
 put !st = Infer $ \_ -> Right ((), st)
 
 failInfer :: String -> Infer a
@@ -184,11 +185,11 @@ bind x type_ = do
 -- traversal, this applies the substitution and quantifies the unification
 -- variables that are deeper than the given level, in the order of their first
 -- occurrence. These variables cannot occur in the typing environment.
--- The traversal is strict, so that it does not build a chain of thunks
--- for the count of the quantified variables and their numbers.
 generalize :: Level -> UType -> Infer Scheme
 generalize level type_ = do
   st <- get
+  -- The traversal is strict, so that it does not build a chain of thunks
+  -- for the count of the quantified variables and their numbers.
   let quantify !count !numbers = \case
         UVar x -> case lookupMetaVarMap x (stSubst st) of
           Just bound -> quantify count numbers bound
@@ -219,9 +220,9 @@ instantiate level (Scheme count type_) = do
 -- * Inference
 
 -- | Infer the type of a term at a level, in a typing environment.
+infer :: Level -> Foil.NameMap n Scheme -> Exp n -> Infer UType
 -- The level and the environment are strict arguments. The generic engine
 -- keeps them in its state, whose fields are strict.
-infer :: Level -> Foil.NameMap n Scheme -> Exp n -> Infer UType
 infer !level !env = \case
   FreeFoil.Var x -> instantiate level (Foil.lookupName x env)
   ETrue -> return UBool
