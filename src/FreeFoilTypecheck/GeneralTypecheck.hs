@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -39,6 +40,12 @@
 -- * Wren Romano. The Haskell library unification-fd, module
 --   @Control.Unification.IntVar@: integer unification variables bound in an
 --   @IntMap@. <https://hackage.haskell.org/package/unification-fd>
+--
+-- The overloaded functions of the engine are @INLINABLE@, so that GHC
+-- specialises them to the signatures of a language in the modules that use
+-- them (see the @INLINABLE@ pragma in the GHC User's Guide). Without the
+-- specialisation, the engine calls the methods of 'Bifunctor', 'ZipMatchK' and
+-- the other classes through dictionaries, which makes it about 1.4 times slower.
 module FreeFoilTypecheck.GeneralTypecheck where
 
 import Control.Monad (ap)
@@ -99,6 +106,7 @@ metaVarsOf = dedupe emptyMetaVarSet . go
     go (toMetaVar -> Just x) = [x]
     go (FreeFoil.Var _) = []
     go (FreeFoil.Node node) = bifoldMap (\(FreeFoil.ScopedAST _ body) -> go body) go node
+{-# INLINABLE metaVarsOf #-}
 
 -- * Type schemes
 
@@ -123,6 +131,7 @@ generalize xs type_ = withGeneralizedVars Foil.emptyScope [] xs $ \freshNameBind
     (Foil.Ext, Foil.Distinct) ->
       let env' = fromListMetaVarMap [(x, FreeFoil.Var name) | (x, name) <- env]
        in PolyType (TypeScheme freshNameBinders (zonkWith (`lookupMetaVarMap` env') (Foil.sink type_)))
+{-# INLINABLE generalize #-}
 
 withGeneralizedVars ::
   (Foil.Distinct n) =>
@@ -150,6 +159,7 @@ instance Foil.Sinkable (NamesWith a) where
 instantiateWith :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => [UType binder typeSig Foil.VoidS] -> TypeScheme (UType binder typeSig) -> UType binder typeSig Foil.VoidS
 instantiateWith types (TypeScheme binders body) =
   FreeFoil.substitutePattern Foil.emptyScope Foil.identitySubst binders types body
+{-# INLINABLE instantiateWith #-}
 
 -- | Number of variables bound by a pattern.
 patternSize :: (Foil.CoSinkable pattern) => pattern n l -> Int
@@ -158,6 +168,7 @@ patternSize = go . Foil.nameBinderListOf
     go :: Foil.NameBinderList n l -> Int
     go Foil.NameBinderListEmpty = 0
     go (Foil.NameBinderListCons _ rest) = 1 + go rest
+{-# INLINABLE patternSize #-}
 
 -- | A canonical form of a type scheme: all unification variables are
 -- quantified, in the order of their first occurrence.
@@ -171,6 +182,7 @@ canonicalHMType hmType =
           offset = 1 + maximum (0 : [i | MetaVar i <- metaVarsOf body])
           type_ = instantiateWith [fromMetaVar (MetaVar (offset + i)) | i <- [0 .. patternSize binders - 1]] scheme
        in generalize (metaVarsOf type_) type_
+{-# INLINABLE canonicalHMType #-}
 
 -- * Substitution
 
@@ -186,6 +198,7 @@ zonkWith look = \case
   type_@(toMetaVar -> Just x) -> maybe type_ (zonkWith look) (look x)
   FreeFoil.Var x -> FreeFoil.Var x
   FreeFoil.Node node -> FreeFoil.Node (bimap (zonkScopedWith look) (zonkWith look) node)
+{-# INLINABLE zonkWith #-}
 
 zonkScopedWith ::
   (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder, Foil.Distinct n) =>
@@ -196,10 +209,12 @@ zonkScopedWith look (FreeFoil.ScopedAST binder body) =
   case (Foil.assertExt binder, Foil.assertDistinct binder) of
     (Foil.Ext, Foil.Distinct) ->
       FreeFoil.ScopedAST binder (zonkWith (fmap Foil.sink . look) body)
+{-# INLINABLE zonkScopedWith #-}
 
 -- | Apply a substitution of unification variables to a closed type.
 zonk :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => MetaVarMap (UType binder typeSig Foil.VoidS) -> UType binder typeSig Foil.VoidS -> UType binder typeSig Foil.VoidS
 zonk subst = zonkWith (`lookupMetaVarMap` subst)
+{-# INLINABLE zonk #-}
 
 -- | Unification variables of a type after applying a substitution
 -- (possibly with repetitions).
@@ -210,10 +225,12 @@ freeMetaVars subst = \case
     Nothing -> [x]
   FreeFoil.Var _ -> []
   FreeFoil.Node node -> bifoldMap (\(FreeFoil.ScopedAST _ body) -> freeMetaVars subst body) (freeMetaVars subst) node
+{-# INLINABLE freeMetaVars #-}
 
 freeMetaVarsHM :: (Bifoldable typeSig) => MetaVarMap (UType binder typeSig Foil.VoidS) -> HMType (UType binder typeSig) -> [MetaVar]
 freeMetaVarsHM subst (MonoType type_) = freeMetaVars subst type_
 freeMetaVarsHM subst (PolyType (TypeScheme _ type_)) = freeMetaVars subst type_
+{-# INLINABLE freeMetaVarsHM #-}
 
 -- * Inference monad
 
@@ -227,20 +244,23 @@ data Generalization
     Naive
   deriving (Eq, Show)
 
+-- | The state of inference. It changes at almost every step, so its fields
+-- are strict, and so are 'put' and 'enterScope'. Lazy updates would allocate
+-- a thunk for each new context and for each field that it changes.
 data TypingContext ty n = TypingContext
   { -- | Triangular substitution of unification variables.
-    tcSubst :: MetaVarMap (ty Foil.VoidS),
+    tcSubst :: !(MetaVarMap (ty Foil.VoidS)),
     -- | Types of the variables in scope.
-    tcTypings :: Foil.NameMap n (HMType ty),
+    tcTypings :: !(Foil.NameMap n (HMType ty)),
     -- | Next unification variable.
-    tcFreshId :: MetaVar,
+    tcFreshId :: !MetaVar,
     -- | Level of each unification variable that is not bound by the substitution.
     -- Invariant: a variable occurs in the typing environment (after applying
     -- the substitution) only if its level is at most the current level.
-    tcLevels :: MetaVarMap Level,
+    tcLevels :: !(MetaVarMap Level),
     -- | Current level: the number of enclosing 'generalizeHM's.
-    tcLevel :: Level,
-    tcGeneralization :: Generalization
+    tcLevel :: !Level,
+    tcGeneralization :: !Generalization
   }
 
 initialTypingContext :: Generalization -> TypingContext ty Foil.VoidS
@@ -273,7 +293,7 @@ get :: TypeCheck ty n (TypingContext ty n)
 get = TypeCheck $ \tc -> Right (tc, tc)
 
 put :: TypingContext ty n -> TypeCheck ty n ()
-put new = TypeCheck $ \_old -> Right ((), new)
+put !new = TypeCheck $ \_old -> Right ((), new)
 
 failTypeCheck :: String -> TypeCheck ty n a
 failTypeCheck msg = TypeCheck (\_ctx -> Left msg)
@@ -292,8 +312,11 @@ enterScope binder types (TypeCheck action)
         ("pattern binds " ++ show (patternSize binder) ++ " variable(s), but the typing rule gives " ++ show (length types) ++ " type(s)")
   | otherwise = TypeCheck $ \ctx -> do
       let typings = tcTypings ctx
-      (x, ctx') <- action ctx {tcTypings = Foil.addNameBinders binder types typings}
-      return (x, ctx' {tcTypings = typings})
+          !inner = ctx {tcTypings = Foil.addNameBinders binder types typings}
+      (x, ctx') <- action inner
+      let !outer = ctx' {tcTypings = typings}
+      return (x, outer)
+{-# INLINABLE enterScope #-}
 
 -- * Interface for typing rules
 
@@ -399,6 +422,7 @@ unifyHM typ1 typ2 = do
     -- resolve a bound unification variable at the root
     walk subst type_@(toMetaVar -> Just x) = maybe type_ (walk subst) (lookupMetaVarMap x subst)
     walk _ type_ = type_
+{-# INLINABLE unifyHM #-}
 
 -- | Bind a unification variable (after the occurs check).
 -- With 'LevelBased' generalisation, the variables of the type
@@ -413,6 +437,7 @@ bindMetaVar x type_ = do
   if x `elem` vars
     then failTypeCheck "occurs check failed"
     else put ctx {tcSubst = insertMetaVarMap x type_ (tcSubst ctx), tcLevels = levels}
+{-# INLINABLE bindMetaVar #-}
 
 -- | Infer the type of a child term one level deeper, and generalise it over
 -- the unification variables that cannot occur in the typing environment
@@ -434,6 +459,7 @@ generalizeHM infer = do
           let envVars = fromListMetaVarSet (concatMap (freeMetaVarsHM subst) (F.toList (tcTypings ctx)))
            in [x | x <- candidates, not (memberMetaVarSet x envVars)]
   return (generalize vars type')
+{-# INLINABLE generalizeHM #-}
 
 -- | Like 'generalizeHM', for the types of the variables of a pattern, as
 -- returned by a computation such as @bound >>= checkBinderHM body@. Each type
@@ -446,6 +472,7 @@ generalizePatternHM infer = do
   types <- enterLevel infer
   -- @generalizeHM (return t)@ generalises @t@ at the current level
   mapM (generalizeHM . return) types
+{-# INLINABLE generalizePatternHM #-}
 
 -- | Run a computation one level deeper.
 enterLevel :: TypeCheck ty n a -> TypeCheck ty n a
@@ -466,6 +493,7 @@ checkHM ::
 checkHM infer expected = do
   type_ <- infer
   unifyHM type_ expected
+{-# INLINABLE checkHM #-}
 
 -- | Check the pattern of a scoped child term against a type, and infer the
 -- type of the body with the (monomorphic) types of the variables of the
@@ -484,12 +512,14 @@ instantiateHM (MonoType type_) = return type_
 instantiateHM (PolyType scheme@(TypeScheme binders _)) = do
   types <- mapM (const freshHM) [1 .. patternSize binders]
   return (instantiateWith types scheme)
+{-# INLINABLE instantiateHM #-}
 
 -- | Apply the current substitution to a type.
 zonkHM :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => UType binder typeSig Foil.VoidS -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 zonkHM type_ = do
   ctx <- get
   return (zonk (tcSubst ctx) type_)
+{-# INLINABLE zonkHM #-}
 
 -- * Generic traversal
 
@@ -498,6 +528,7 @@ inferTypeNewClosed ::
   FreeFoil.AST binder sig Foil.VoidS ->
   TypeCheck (UType typeBinder typeSig) Foil.VoidS (UType typeBinder typeSig Foil.VoidS)
 inferTypeNewClosed expr = reconstructType expr >>= zonkHM
+{-# INLINABLE inferTypeNewClosed #-}
 
 -- | Infer the principal type scheme of a closed term.
 inferTypeSchemeClosed ::
@@ -507,6 +538,7 @@ inferTypeSchemeClosed ::
   Either String (HMType (UType typeBinder typeSig))
 inferTypeSchemeClosed generalization expr =
   fst <$> runTypeCheck (generalizeHM (reconstructType expr)) (initialTypingContext generalization)
+{-# INLINABLE inferTypeSchemeClosed #-}
 
 -- | Infer the type of a term: instantiate the type of a variable,
 -- or apply the typing rule of a node to its (suspended) children.
@@ -520,6 +552,7 @@ reconstructType = \case
     instantiateHM (Foil.lookupName x (tcTypings ctx))
   FreeFoil.Node node ->
     inferSigHM (bimap reconstructTypeScoped reconstructType node)
+{-# INLINABLE reconstructType #-}
 
 reconstructTypeScoped ::
   (Foil.CoSinkable typeBinder, Foil.SinkableK typeBinder, Bifunctor sig, Foil.CoSinkable binder, Bifunctor typeSig, HMTypingSig typeBinder typeSig sig, HMTypingPattern typeBinder typeSig binder) =>
@@ -530,6 +563,7 @@ reconstructTypeScoped (FreeFoil.ScopedAST binder body) =
     { checkBinderHM = checkPatternHM binder,
       inferBodyHM = \types -> enterScope binder types (reconstructType body)
     }
+{-# INLINABLE reconstructTypeScoped #-}
 
 -- * Comparing types
 
@@ -582,6 +616,7 @@ equivUpToRenaming t1 t2 = equivHMType alphaEquiv (canonicalHMType t1) (canonical
 
 injectUType :: (Bifunctor typeSig) => FreeFoil.AST binder typeSig n -> UType binder typeSig n
 injectUType = transAST L2
+{-# INLINABLE injectUType #-}
 
 transAST ::
   (Bifunctor sig1) =>
@@ -590,6 +625,7 @@ transAST ::
   FreeFoil.AST binder sig2 n
 transAST _ (FreeFoil.Var x) = FreeFoil.Var x
 transAST phi (FreeFoil.Node node) = FreeFoil.Node (phi (bimap (transScopedAST phi) (transAST phi) node))
+{-# INLINABLE transAST #-}
 
 transScopedAST ::
   (Bifunctor sig1) =>
@@ -598,3 +634,4 @@ transScopedAST ::
   FreeFoil.ScopedAST binder sig2 n
 transScopedAST phi (FreeFoil.ScopedAST binder body) =
   FreeFoil.ScopedAST binder (transAST phi body)
+{-# INLINABLE transScopedAST #-}
