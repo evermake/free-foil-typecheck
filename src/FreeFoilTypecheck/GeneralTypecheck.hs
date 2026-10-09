@@ -156,19 +156,23 @@ instance Foil.Sinkable (NamesWith a) where
   sinkabilityProof rename (NamesWith xs) = NamesWith (map (fmap rename) xs)
 
 -- | Instantiate the quantified variables of a type scheme with the given types.
+-- The binders of a scheme are a list already, so this extends the substitution
+-- with 'Foil.addSubstList' rather than 'FreeFoil.substitutePattern', which
+-- would collect them into a list again ('Foil.nameBinderListOf').
 instantiateWith :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => [UType binder typeSig Foil.VoidS] -> TypeScheme (UType binder typeSig) -> UType binder typeSig Foil.VoidS
 instantiateWith types (TypeScheme binders body) =
-  FreeFoil.substitutePattern Foil.emptyScope Foil.identitySubst binders types body
+  FreeFoil.substitute Foil.emptyScope (Foil.addSubstList Foil.identitySubst binders types) body
 {-# INLINABLE instantiateWith #-}
 
 -- | Number of variables bound by a pattern.
 patternSize :: (Foil.CoSinkable pattern) => pattern n l -> Int
-patternSize = go . Foil.nameBinderListOf
-  where
-    go :: Foil.NameBinderList n l -> Int
-    go Foil.NameBinderListEmpty = 0
-    go (Foil.NameBinderListCons _ rest) = 1 + go rest
+patternSize = nameBinderListSize . Foil.nameBinderListOf
 {-# INLINABLE patternSize #-}
+
+-- | Number of binders in a list.
+nameBinderListSize :: Foil.NameBinderList n l -> Int
+nameBinderListSize Foil.NameBinderListEmpty = 0
+nameBinderListSize (Foil.NameBinderListCons _ rest) = 1 + nameBinderListSize rest
 
 -- | A canonical form of a type scheme: all unification variables are
 -- quantified, in the order of their first occurrence.
@@ -180,7 +184,7 @@ canonicalHMType hmType =
     scheme@(TypeScheme binders body) ->
       let -- fresh unification variables that do not occur in the type
           offset = 1 + maximum (0 : [i | MetaVar i <- metaVarsOf body])
-          type_ = instantiateWith [fromMetaVar (MetaVar (offset + i)) | i <- [0 .. patternSize binders - 1]] scheme
+          type_ = instantiateWith [fromMetaVar (MetaVar (offset + i)) | i <- [0 .. nameBinderListSize binders - 1]] scheme
        in generalize (metaVarsOf type_) type_
 {-# INLINABLE canonicalHMType #-}
 
@@ -300,6 +304,8 @@ failTypeCheck msg = TypeCheck (\_ctx -> Left msg)
 
 -- | Run a computation in a scope extended with a pattern.
 -- The list gives the types of the variables bound by the pattern, in order.
+-- The binders of the pattern are collected into a list ('Foil.nameBinderListOf')
+-- once, since free-foil walks the whole pattern to do it.
 enterScope ::
   (Foil.CoSinkable binder) =>
   binder n l ->
@@ -307,15 +313,17 @@ enterScope ::
   TypeCheck ty l a ->
   TypeCheck ty n a
 enterScope binder types (TypeCheck action)
-  | patternSize binder /= length types =
+  | nameBinderListSize binders /= length types =
       failTypeCheck
-        ("pattern binds " ++ show (patternSize binder) ++ " variable(s), but the typing rule gives " ++ show (length types) ++ " type(s)")
+        ("pattern binds " ++ show (nameBinderListSize binders) ++ " variable(s), but the typing rule gives " ++ show (length types) ++ " type(s)")
   | otherwise = TypeCheck $ \ctx -> do
       let typings = tcTypings ctx
-          !inner = ctx {tcTypings = Foil.addNameBinders binder types typings}
+          !inner = ctx {tcTypings = Foil.addNameBinderList binders types typings}
       (x, ctx') <- action inner
       let !outer = ctx' {tcTypings = typings}
       return (x, outer)
+  where
+    binders = Foil.nameBinderListOf binder
 {-# INLINABLE enterScope #-}
 
 -- * Interface for typing rules
@@ -510,7 +518,7 @@ inferScopedHM scoped type_ = do
 instantiateHM :: (Bifunctor typeSig, Foil.CoSinkable binder, Foil.SinkableK binder) => HMType (UType binder typeSig) -> TypeCheck (UType binder typeSig) n (UType binder typeSig Foil.VoidS)
 instantiateHM (MonoType type_) = return type_
 instantiateHM (PolyType scheme@(TypeScheme binders _)) = do
-  types <- mapM (const freshHM) [1 .. patternSize binders]
+  types <- mapM (const freshHM) [1 .. nameBinderListSize binders]
   return (instantiateWith types scheme)
 {-# INLINABLE instantiateHM #-}
 
