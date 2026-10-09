@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
@@ -80,13 +81,14 @@ data Scheme = Scheme Int UType
 
 -- * Inference monad
 
+-- | The state of inference.
 data InferState = InferState
   { -- | Triangular substitution of unification variables.
-    stSubst :: MetaVarMap UType,
+    stSubst :: !(MetaVarMap UType),
     -- | Level of each unification variable.
-    stLevels :: MetaVarMap Level,
+    stLevels :: !(MetaVarMap Level),
     -- | Next unification variable.
-    stNext :: MetaVar
+    stNext :: !MetaVar
   }
 
 newtype Infer a = Infer {runInfer :: InferState -> Either String (a, InferState)}
@@ -105,7 +107,9 @@ get :: Infer InferState
 get = Infer $ \st -> Right (st, st)
 
 put :: InferState -> Infer ()
-put st = Infer $ \_ -> Right ((), st)
+-- Strict, as are the fields of 'InferState' and the state of the generic
+-- engine.
+put !st = Infer $ \_ -> Right ((), st)
 
 failInfer :: String -> Infer a
 failInfer msg = Infer $ \_ -> Left msg
@@ -184,19 +188,21 @@ bind x type_ = do
 generalize :: Level -> UType -> Infer Scheme
 generalize level type_ = do
   st <- get
-  let quantify acc@(count, numbers) = \case
+  -- The traversal is strict, so that it does not build a chain of thunks
+  -- for the count of the quantified variables and their numbers.
+  let quantify !count !numbers = \case
         UVar x -> case lookupMetaVarMap x (stSubst st) of
-          Just bound -> quantify acc bound
+          Just bound -> quantify count numbers bound
           Nothing
-            | levelOf x st <= level -> (UVar x, acc)
-            | Just i <- lookupMetaVarMap x numbers -> (UGen i, acc)
-            | otherwise -> (UGen count, (count + 1, insertMetaVarMap x count numbers))
+            | levelOf x st <= level -> (UVar x, count, numbers)
+            | Just i <- lookupMetaVarMap x numbers -> (UGen i, count, numbers)
+            | otherwise -> (UGen count, count + 1, insertMetaVarMap x count numbers)
         UArrow a b ->
-          let (a', acc') = quantify acc a
-              (b', acc'') = quantify acc' b
-           in (UArrow a' b', acc'')
-        t -> (t, acc)
-      (body, (quantified, _)) = quantify (0, emptyMetaVarMap) type_
+          let !(a', count', numbers') = quantify count numbers a
+              !(b', count'', numbers'') = quantify count' numbers' b
+           in (UArrow a' b', count'', numbers'')
+        t -> (t, count, numbers)
+      !(body, quantified, _) = quantify 0 emptyMetaVarMap type_
   return (Scheme quantified body)
 
 -- | Instantiate the quantified variables of a scheme with fresh unification
@@ -215,7 +221,9 @@ instantiate level (Scheme count type_) = do
 
 -- | Infer the type of a term at a level, in a typing environment.
 infer :: Level -> Foil.NameMap n Scheme -> Exp n -> Infer UType
-infer level env = \case
+-- The level and the environment are strict arguments. The generic engine
+-- keeps them in its state, whose fields are strict.
+infer !level !env = \case
   FreeFoil.Var x -> instantiate level (Foil.lookupName x env)
   ETrue -> return UBool
   EFalse -> return UBool
