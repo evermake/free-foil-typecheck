@@ -95,17 +95,20 @@ toMetaVar _ = Nothing
 -- | Unification variables of a type, in the order of their first occurrence.
 -- This does not look into the substitution (see 'freeMetaVars').
 metaVarsOf :: (Bifoldable typeSig) => UType binder typeSig n -> [MetaVar]
-metaVarsOf = dedupe emptyMetaVarSet . go
+metaVarsOf type_ = dedupe emptyMetaVarSet (go type_ [])
   where
-    dedupe _ [] = []
-    dedupe seen (x : xs)
+    dedupe !_ [] = []
+    dedupe !seen (x : xs)
       | memberMetaVarSet x seen = dedupe seen xs
       | otherwise = x : dedupe (insertMetaVarSet x seen) xs
 
-    go :: (Bifoldable typeSig) => UType binder typeSig n -> [MetaVar]
-    go (toMetaVar -> Just x) = [x]
-    go (FreeFoil.Var _) = []
-    go (FreeFoil.Node node) = bifoldMap (\(FreeFoil.ScopedAST _ body) -> go body) go node
+    -- Fold into an accumulator, so that each variable is consed once.
+    -- Appending the lists of the children instead can take time quadratic
+    -- in the depth of a type nested on the left.
+    go :: (Bifoldable typeSig) => UType binder typeSig n -> [MetaVar] -> [MetaVar]
+    go (toMetaVar -> Just x) !acc = x : acc
+    go (FreeFoil.Var _) !acc = acc
+    go (FreeFoil.Node node) !acc = bifoldr (\(FreeFoil.ScopedAST _ body) -> go body) go acc node
 {-# INLINABLE metaVarsOf #-}
 
 -- * Type schemes
@@ -129,10 +132,13 @@ generalize [] type_ = MonoType type_
 generalize xs type_ = withGeneralizedVars Foil.emptyScope [] xs $ \freshNameBinders env ->
   case (Foil.assertExt freshNameBinders, Foil.assertDistinct freshNameBinders) of
     (Foil.Ext, Foil.Distinct) ->
-      let env' = fromListMetaVarMap [(x, FreeFoil.Var name) | (x, name) <- env]
-       in PolyType (TypeScheme freshNameBinders (zonkWith (`lookupMetaVarMap` env') (Foil.sink type_)))
+      -- Evaluate the map and the body together with the scheme.
+      let !env' = fromListMetaVarMap [(x, FreeFoil.Var name) | (x, name) <- env]
+          !body = zonkWith (`lookupMetaVarMap` env') (Foil.sink type_)
+       in PolyType (TypeScheme freshNameBinders body)
 {-# INLINABLE generalize #-}
 
+-- | Create a fresh binder for each of the given values, extending the scope.
 withGeneralizedVars ::
   (Foil.Distinct n) =>
   Foil.Scope n ->
@@ -140,11 +146,13 @@ withGeneralizedVars ::
   [a] ->
   (forall l. Foil.NameBinderList n l -> [(a, Foil.Name l)] -> r) ->
   r
-withGeneralizedVars scope env xs cont =
+-- The scope is strict: a fresh name depends on the scope, so a lazy scope
+-- would build a chain of thunks, one for each binder.
+withGeneralizedVars !scope env xs cont =
   case xs of
     [] -> cont Foil.NameBinderListEmpty env
     y : ys -> Foil.withFresh scope $ \binder ->
-      let scope' = Foil.extendScope binder scope
+      let !scope' = Foil.extendScope binder scope
           NamesWith env' = Foil.sink (NamesWith env) -- O(1), unlike sinking each name
        in withGeneralizedVars scope' ((y, Foil.nameOf binder) : env') ys $ \nameBinderList env'' ->
             cont (Foil.NameBinderListCons binder nameBinderList) env''
@@ -458,7 +466,7 @@ generalizeHM infer = do
   type_ <- enterLevel infer
   ctx <- get
   let subst = tcSubst ctx
-      type' = zonk subst type_
+      !type' = zonk subst type_
       candidates = metaVarsOf type'
       vars = case tcGeneralization ctx of
         LevelBased ->
@@ -466,7 +474,10 @@ generalizeHM infer = do
         Naive ->
           let envVars = fromListMetaVarSet (concatMap (freeMetaVarsHM subst) (F.toList (tcTypings ctx)))
            in [x | x <- candidates, not (memberMetaVarSet x envVars)]
-  return (generalize vars type')
+      -- Compute the scheme at this step rather than when it is first used,
+      -- so that it does not keep the typing context of this step alive.
+      !scheme = generalize vars type'
+  return scheme
 {-# INLINABLE generalizeHM #-}
 
 -- | Like 'generalizeHM', for the types of the variables of a pattern, as
