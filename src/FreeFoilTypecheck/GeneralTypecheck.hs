@@ -457,7 +457,7 @@ bindMetaVar :: (Bifoldable typeSig) => MetaVar -> UType binder typeSig Foil.Void
 bindMetaVar x type_ = do
   ctx <- get
   let adjust = case (tcGeneralization ctx, lookupMetaVarMap x (tcLevels ctx)) of
-        (LevelBased, Just level) -> adjustMetaVarMap (min level)
+        (LevelBased, Just level) -> lowerLevel level
         _ -> \_ levels -> levels
   case occursCheckAdjust (tcSubst ctx) x adjust (tcLevels ctx) type_ of
     Nothing -> failTypeCheck "occurs check failed"
