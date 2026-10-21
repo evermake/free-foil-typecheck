@@ -66,7 +66,8 @@ inferHM = inferTypeSchemeClosed
 data Family = Family
   { familyName :: String,
     familyProgram :: Int -> String,
-    familySizes :: [Int]
+    familySizes :: [Int],
+    familyEngines :: [Engine]
   }
 
 -- | @λa1. … λak. let f0 = λx. x in let f1 = λx. f0 x in … in fn ak@
@@ -89,12 +90,21 @@ letChain n =
     ++ "f"
     ++ show n
 
+-- | @λx. (λkn. kn (… (λk1. k1 x)))@: every application binds a unification
+-- variable to a type nested on the left, one level deeper than the previous
+-- one. The occurs check traverses each of these types, so the work is
+-- quadratic in n for every engine. The original engine is left out: it takes
+-- minutes at n = 1280.
+leftChain :: Int -> String
+leftChain n = "λx. " ++ foldl (\e i -> "(λk" ++ show i ++ ". k" ++ show i ++ " " ++ e ++ ")") "x" [1 .. n]
+
 -- | @nested-let@ has k = n outer λs, @wide-env@ has k = 500.
 families :: [Family]
 families =
-  [ Family "nested-let" (\n -> lambdasThenLets n n) [160, 320, 640, 1280],
-    Family "wide-env" (lambdasThenLets 500) [160, 320, 640],
-    Family "let-chain" letChain [160, 320, 640, 1280]
+  [ Family "nested-let" (\n -> lambdasThenLets n n) [160, 320, 640, 1280] engines,
+    Family "wide-env" (lambdasThenLets 500) [160, 320, 640] engines,
+    Family "let-chain" letChain [160, 320, 640, 1280] engines,
+    Family "left-chain" leftChain [160, 320, 640, 1280] (filter ((/= "unoptimized-levels") . engineName) engines)
   ]
 
 -- | A parsed program. 'env' forces it before the measurement.
@@ -113,7 +123,7 @@ benchFamily family = bgroup (familyName family) (map benchSize (familySizes fami
   where
     benchSize n =
       env (pure (parseProgram (familyProgram family n))) $ \program ->
-        bgroup size (map (benchEngine size program) engines)
+        bgroup size (map (benchEngine size program) (familyEngines family))
       where
         size = "n=" ++ show n
     benchEngine size program engine
