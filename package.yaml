@@ -4,6 +4,7 @@ github: "evermake/free-foil-typecheck"
 description: Please see the README on GitHub at <https://github.com/evermake/free-foil-typecheck#readme>
 synopsis: Type systems implementation powered by Free Foil.
 category: Language
+license: BSD3
 
 extra-source-files:
   - README.md
