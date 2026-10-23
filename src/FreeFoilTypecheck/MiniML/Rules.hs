@@ -23,12 +23,11 @@ module FreeFoilTypecheck.MiniML.Rules where
 import Control.Monad (forM_)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
-import Data.Bifoldable (bifoldMap, bifoldr)
+import Data.Bifoldable (biany, bifoldr)
 import Data.Bifunctor (bimap)
 import Data.Bifunctor.Sum (Sum (..))
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import Data.Monoid (Any (..))
 import qualified Data.Set as Set
 import FreeFoilTypecheck.GeneralTypecheck
 import FreeFoilTypecheck.MetaVar (MetaVar (..))
@@ -199,7 +198,7 @@ typeOfAnnotation raw =
     hasForAll = \case
       TForAll _ _ -> True
       FreeFoil.Var _ -> False
-      FreeFoil.Node node -> getAny (bifoldMap (\(FreeFoil.ScopedAST _ body) -> Any (hasForAll body)) (Any . hasForAll) node)
+      FreeFoil.Node node -> biany (\(FreeFoil.ScopedAST _ body) -> hasForAll body) hasForAll node
 
 -- | Convert a type of MiniML to a type of the engine,
 -- mapping its unification variables with the given function.
