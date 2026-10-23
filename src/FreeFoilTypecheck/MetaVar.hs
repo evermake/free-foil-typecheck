@@ -102,8 +102,9 @@ shallowerLevel :: Level -> Level
 shallowerLevel (Level n) = Level (n - 1)
 
 -- | @lowerLevel level x levels@ gives @x@ the given level if its own level is
--- deeper. The map is left as it is otherwise, which avoids rebuilding it when
--- no level changes.
+-- deeper, and leaves the map as it is otherwise. @IntMap.adjust@ would rebuild
+-- the path to @x@ even when the level does not change, and the level
+-- adjustment calls this at every occurrence of a variable in a bound type.
 lowerLevel :: Level -> MetaVar -> MetaVarMap Level -> MetaVarMap Level
 lowerLevel level x levels = case lookupMetaVarMap x levels of
   Just level' | level' > level -> insertMetaVarMap x level levels
