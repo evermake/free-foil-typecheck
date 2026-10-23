@@ -172,7 +172,7 @@ bind x type_ = do
           Just bound -> adjust levels bound
           Nothing
             | y == x -> Nothing
-            | otherwise -> Just (adjustMetaVarMap (min level) y levels)
+            | otherwise -> Just (lowerLevel level y levels)
         UArrow a b -> adjust levels a >>= (`adjust` b)
         _ -> Just levels
   case adjust (stLevels st) type_ of

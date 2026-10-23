@@ -19,7 +19,6 @@ module FreeFoilTypecheck.MetaVar
     lookupMetaVarMap,
     findWithDefaultMetaVarMap,
     insertMetaVarMap,
-    adjustMetaVarMap,
     sizeMetaVarMap,
 
     -- * Sets of unification variables
@@ -34,6 +33,7 @@ module FreeFoilTypecheck.MetaVar
     outermostLevel,
     deeperLevel,
     shallowerLevel,
+    lowerLevel,
   )
 where
 
@@ -65,9 +65,6 @@ findWithDefaultMetaVarMap def (MetaVar i) (MetaVarMap m) = IntMap.findWithDefaul
 
 insertMetaVarMap :: MetaVar -> a -> MetaVarMap a -> MetaVarMap a
 insertMetaVarMap (MetaVar i) a (MetaVarMap m) = MetaVarMap (IntMap.insert i a m)
-
-adjustMetaVarMap :: (a -> a) -> MetaVar -> MetaVarMap a -> MetaVarMap a
-adjustMetaVarMap f (MetaVar i) (MetaVarMap m) = MetaVarMap (IntMap.adjust f i m)
 
 sizeMetaVarMap :: MetaVarMap a -> Int
 sizeMetaVarMap (MetaVarMap m) = IntMap.size m
@@ -103,3 +100,12 @@ deeperLevel (Level n) = Level (n + 1)
 -- | The level outside of the innermost generalisation.
 shallowerLevel :: Level -> Level
 shallowerLevel (Level n) = Level (n - 1)
+
+-- | @lowerLevel level x levels@ gives @x@ the given level if its own level is
+-- deeper, and leaves the map as it is otherwise. @IntMap.adjust@ would rebuild
+-- the path to @x@ even when the level does not change, and the level
+-- adjustment calls this at every occurrence of a variable in a bound type.
+lowerLevel :: Level -> MetaVar -> MetaVarMap Level -> MetaVarMap Level
+lowerLevel level x levels = case lookupMetaVarMap x levels of
+  Just level' | level' > level -> insertMetaVarMap x level levels
+  _ -> levels

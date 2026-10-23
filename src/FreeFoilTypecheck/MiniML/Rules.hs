@@ -23,12 +23,12 @@ module FreeFoilTypecheck.MiniML.Rules where
 import Control.Monad (forM_)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Free.Foil as FreeFoil
-import Data.Bifoldable (bifoldMap)
+import Data.Bifoldable (biany, bifoldr)
 import Data.Bifunctor (bimap)
 import Data.Bifunctor.Sum (Sum (..))
-import Data.List (elemIndex, nub)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 import FreeFoilTypecheck.GeneralTypecheck
 import FreeFoilTypecheck.MetaVar (MetaVar (..))
 import FreeFoilTypecheck.MiniML.FreeFoilConfig (typeOfScopedType)
@@ -198,7 +198,7 @@ typeOfAnnotation raw =
     hasForAll = \case
       TForAll _ _ -> True
       FreeFoil.Var _ -> False
-      FreeFoil.Node node -> or (bifoldMap (\(FreeFoil.ScopedAST _ body) -> [hasForAll body]) (\t -> [hasForAll t]) node)
+      FreeFoil.Node node -> biany (\(FreeFoil.ScopedAST _ body) -> hasForAll body) hasForAll node
 
 -- | Convert a type of MiniML to a type of the engine,
 -- mapping its unification variables with the given function.
@@ -213,17 +213,26 @@ fromTypeClosed :: Type' -> UType TypePattern TypeSig Foil.VoidS
 fromTypeClosed type_ = fromTypeWith metaVarOf type_
   where
     idents = uvarIdentsOf type_
-    metaVarOf x = MetaVar (fromMaybe 0 (elemIndex x idents))
+    numbers = Map.fromList (zip idents (map MetaVar [0 ..]))
+    metaVarOf x = fromMaybe (MetaVar 0) (Map.lookup x numbers)
 
 -- | Unification variables of a type of MiniML, in the order of their first occurrence.
 uvarIdentsOf :: Type n -> [Raw.UVarIdent]
-uvarIdentsOf = nub . go
+uvarIdentsOf type_ = dedupe Set.empty (go type_ [])
   where
-    go :: Type n -> [Raw.UVarIdent]
-    go = \case
-      TUVar x -> [x]
-      FreeFoil.Var _ -> []
-      FreeFoil.Node node -> bifoldMap (\(FreeFoil.ScopedAST _ body) -> go body) go node
+    dedupe _ [] = []
+    dedupe seen (x : xs)
+      | Set.member x seen = dedupe seen xs
+      | otherwise = x : dedupe (Set.insert x seen) xs
+
+    -- Fold into an accumulator, as 'metaVarsOf' does: appending the lists of
+    -- the children can take time quadratic in the depth of a type nested on
+    -- the left.
+    go :: Type n -> [Raw.UVarIdent] -> [Raw.UVarIdent]
+    go t acc = case t of
+      TUVar x -> x : acc
+      FreeFoil.Var _ -> acc
+      FreeFoil.Node node -> bifoldr (\(FreeFoil.ScopedAST _ body) -> go body) go acc node
 
 -- | Convert a type of the engine back to MiniML.
 fromUType :: UType TypePattern TypeSig n -> Type n
